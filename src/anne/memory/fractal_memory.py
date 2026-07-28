@@ -6,7 +6,6 @@ import json
 import sqlite3
 import time
 from datetime import datetime
-from typing import Optional
 
 from anne.core.cognitive_state import EthicScore, Hypothesis
 
