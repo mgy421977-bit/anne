@@ -194,7 +194,10 @@ class FractalMemory:
         key = f"{min(id_a, id_b)}_{max(id_a, id_b)}"
         cur = self.conn.cursor()
         existing = cur.execute(
-            "SELECT id, relation_strength, conflict_count, resolution_count FROM empathy_map WHERE id=?",
+            """
+            SELECT id, relation_strength, conflict_count, resolution_count
+            FROM empathy_map WHERE id=?
+            """,
             (key,),
         ).fetchone()
         if existing:
