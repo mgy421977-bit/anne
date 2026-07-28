@@ -12,6 +12,7 @@ from anne.core.cognitive_state import Hypothesis
 
 try:
     import anthropic
+
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
@@ -24,20 +25,21 @@ class MythosEngine:
     generation. Otherwise falls back to a deterministic placeholder.
     """
 
-    SYSTEM_PROMPT = """Sen MYTHOS merak motorusun. Görevin bir konuyu derinlemesine araştırmak için hipotezler üretmek.
-
-Kurallar:
-1. Her hipotez somut, test edilebilir bir önerme olmalı
-2. Olasılık değeri (0.01-0.99) gerçekçi olmalı — hiçbir hipotez 0 olamaz
-3. Her iterasyonda önceki hipotezden öğrenerek güncelle
-4. Yanıtını SADECE JSON formatında ver, başka hiçbir şey yazma
-
-JSON formatı:
-{
-  "claim": "hipotez metni (Türkçe, 1-2 cümle)",
-  "probability": 0.XX,
-  "reasoning": "neden bu olasılık (1 cümle)"
-}"""
+    SYSTEM_PROMPT = (
+        "Sen MYTHOS merak motorusun. Görevin bir konuyu derinlemesine "
+        "araştırmak için hipotezler üretmek.\n\n"
+        "Kurallar:\n"
+        "1. Her hipotez somut, test edilebilir bir önerme olmalı\n"
+        "2. Olasılık değeri (0.01-0.99) gerçekçi olmalı — hiçbir hipotez 0 olamaz\n"
+        "3. Her iterasyonda önceki hipotezden öğrenerek güncelle\n"
+        "4. Yanıtını SADECE JSON formatında ver, başka hiçbir şey yazma\n\n"
+        "JSON formatı:\n"
+        "{\n"
+        '  "claim": "hipotez metni (Türkçe, 1-2 cümle)",\n'
+        '  "probability": 0.XX,\n'
+        '  "reasoning": "neden bu olasılık (1 cümle)"\n'
+        "}"
+    )
 
     def __init__(self) -> None:
         self.iteration = 0
@@ -57,7 +59,9 @@ JSON formatı:
         hyp_id = f"hyp_{int(time.time() * 1000)}_{self.iteration}"
 
         if self.use_api:
-            return self._generate_via_api(hyp_id, topic, prior_confidence, previous_claim)
+            return self._generate_via_api(
+                hyp_id, topic, prior_confidence, previous_claim
+            )
         return self._generate_placeholder(hyp_id, topic, prior_confidence)
 
     def _generate_via_api(
@@ -68,7 +72,8 @@ JSON formatı:
             f"Önceki güven: {prior:.3f}\n"
             f"Önceki hipotez: {previous if previous else 'Yok (ilk iterasyon)'}\n"
             f"İterasyon: {self.iteration}\n\n"
-            "Bu konuda yeni bir hipotez üret. Önceki hipotezi geliştir veya alternatif öner."
+            "Bu konuda yeni bir hipotez üret. Önceki hipotezi geliştir "
+            "veya alternatif öner."
         )
         try:
             response = self.client.messages.create(
@@ -105,7 +110,10 @@ JSON formatı:
         prob = max(0.01, min(0.99, prior + noise + (0.03 * self.iteration)))
         delta = round(prob - prior, 3)
         level = "high" if prob > 0.7 else "medium" if prob > 0.4 else "low"
-        claim = f"[PH·{self.iteration}] '{topic}' — pattern detected with {level} confidence."
+        claim = (
+            f"[PH·{self.iteration}] '{topic}' — pattern detected "
+            f"with {level} confidence."
+        )
         return Hypothesis(
             id=hyp_id,
             topic=topic,
@@ -122,14 +130,16 @@ JSON formatı:
         return self._test_placeholder(h)
 
     def _test_via_api(self, h: Hypothesis) -> Hypothesis:
-        test_prompt = """Sen MYTHOS test motorusun. Bir hipotezi değerlendirip sonucu JSON döndür.
-
-JSON formatı:
-{
-  "outcome": "desteklendi/zayıf/reddedildi",
-  "updated_probability": 0.XX,
-  "finding": "kısa bulgu açıklaması (Türkçe)"
-}"""
+        test_prompt = (
+            "Sen MYTHOS test motorusun. Bir hipotezi değerlendirip "
+            "sonucu JSON döndür.\n\n"
+            "JSON formatı:\n"
+            "{\n"
+            '  "outcome": "desteklendi/zayıf/reddedildi",\n'
+            '  "updated_probability": 0.XX,\n'
+            '  "finding": "kısa bulgu açıklaması (Türkçe)"\n'
+            "}"
+        )
         try:
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -138,7 +148,10 @@ JSON formatı:
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Hipotez: {h.claim}\nMevcut olasılık: {h.probability}",
+                        "content": (
+                            f"Hipotez: {h.claim}\n"
+                            f"Mevcut olasılık: {h.probability}"
+                        ),
                     }
                 ],
             )
@@ -150,9 +163,12 @@ JSON formatı:
             data = json.loads(raw)
             h.tested = True
             h.probability = max(
-                0.01, min(0.99, float(data.get("updated_probability", h.probability)))
+                0.01,
+                min(0.99, float(data.get("updated_probability", h.probability))),
             )
-            h.result = f"[TEST-API] {data.get('outcome', '?')}: {data.get('finding', '')}"
+            outcome = data.get("outcome", "?")
+            finding = data.get("finding", "")
+            h.result = f"[TEST-API] {outcome}: {finding}"
             return h
         except Exception:
             return self._test_placeholder(h)
