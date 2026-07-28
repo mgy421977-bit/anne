@@ -1,0 +1,23 @@
+name: Feature / Research Proposal
+description: Propose a new feature, architectural change, or research direction
+title: "[Proposal]: "
+labels: ["enhancement", "research"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this needed?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Detailed description of the proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
