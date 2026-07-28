@@ -6,7 +6,6 @@ import json
 import os
 import random
 import time
-from typing import Optional
 
 from anne.core.cognitive_state import Hypothesis
 
