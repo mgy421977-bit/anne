@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "ANNE – Adaptive Neural Nexus Engine"
+version: 0.1.0
+date-released: 2026-07-28
+authors:
+  - family-names: "Yılmaz"
+    given-names: "Mustafa Gökhan"
+    orcid: "https://orcid.org/0009-0002-6591-0163"
+    affiliation: "Vitavolt Global Enerji Üretim Ltd. Şti. / Independent Researcher"
+repository-code: "https://github.com/mgy421977-bit/anne"
+license: Apache-2.0
+abstract: >
+  ANNE (Adaptive Neural Nexus Engine) is a six-stage cognitive architecture
+  designed for semantic validation during inference, ethical decision-making,
+  fractal memory, and runtime learning. It combines a Mythos curiosity engine
+  with a structured ethical core (Human-First ADS) to address hallucination
+  and alignment challenges in current LLM systems.
+keywords:
+  - cognitive architecture
+  - ethical AI
+  - hallucination reduction
+  - fractal memory
+  - multi-agent systems
+  - human-aligned AI
