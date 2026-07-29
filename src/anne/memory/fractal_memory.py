@@ -14,7 +14,7 @@ class FractalMemory:
     """Persistent episodic memory with pattern accumulation.
 
     Stores hypotheses, decisions, dream patterns, learned rules,
-    and inter-consciousness empathy relations.
+    inter-consciousness empathy relations, and ANLA failure traces.
     """
 
     def __init__(self, db_path: str = "anne.db") -> None:
@@ -89,6 +89,21 @@ class FractalMemory:
                 conflict_count INTEGER DEFAULT 0,
                 resolution_count INTEGER DEFAULT 0,
                 updated_at TEXT
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS failure_traces (
+                id TEXT PRIMARY KEY,
+                cycle_id TEXT,
+                stage TEXT,
+                raw_input TEXT,
+                reason TEXT,
+                meta_tag TEXT,
+                hypothesis_id TEXT,
+                ethic_total REAL,
+                created_at TEXT
             )
             """
         )
@@ -269,3 +284,48 @@ class FractalMemory:
             "SELECT relation_strength FROM empathy_map WHERE id=?", (key,)
         ).fetchone()
         return row[0] if row else 0.5
+
+    def save_failure_trace(
+        self,
+        cycle_id: str,
+        stage: str,
+        raw_input: str,
+        reason: str,
+        meta_tag: str = "",
+        hypothesis_id: str = "",
+        ethic_total: float = 0.0,
+    ) -> str:
+        """Persist a structured failure trace for ANLA retry support."""
+        trace_id = f"ft_{int(time.time() * 1000)}"
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO failure_traces
+            VALUES (?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                trace_id,
+                cycle_id,
+                stage,
+                raw_input,
+                reason,
+                meta_tag,
+                hypothesis_id,
+                ethic_total,
+                datetime.now().isoformat(),
+            ),
+        )
+        self.conn.commit()
+        return trace_id
+
+    def get_recent_failures(self, limit: int = 5) -> list:
+        """Return most recent failure traces (newest first)."""
+        return self.conn.cursor().execute(
+            """
+            SELECT id, cycle_id, stage, reason, meta_tag, ethic_total, created_at
+            FROM failure_traces
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
