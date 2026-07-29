@@ -57,6 +57,16 @@ class AnneMythosBridge:
             self.memory.save_dream_pattern(
                 f"{state.input_type}:{score.verdict}", score.total, score.verdict
             )
+            if score and score.verdict == "REDDET":
+                self.memory.save_failure_trace(
+                    cycle_id=str(self.cycle_count),
+                    stage="ANLA",
+                    raw_input=topic,
+                    reason=score.reasoning,
+                    meta_tag=f"verdict={score.verdict}",
+                    hypothesis_id=h.id,
+                    ethic_total=score.total,
+                )
 
             results.append(
                 {
