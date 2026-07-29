@@ -1,0 +1,36 @@
+{
+  "version": "0.1",
+  "description": "Tiny fixed set for ANLA on/off ablation. Not a published benchmark.",
+  "prompts": [
+    {
+      "id": "p01",
+      "text": "Water boils at 100 degrees Celsius at standard atmospheric pressure.",
+      "expected": "coherent",
+      "notes": "Simple factual"
+    },
+    {
+      "id": "p02",
+      "text": "Water boils at 100 degrees Celsius and also never boils under any pressure.",
+      "expected": "incoherent",
+      "notes": "Internal contradiction"
+    },
+    {
+      "id": "p03",
+      "text": "The capital of France is Berlin according to this draft.",
+      "expected": "incoherent",
+      "notes": "Factual error"
+    },
+    {
+      "id": "p04",
+      "text": "Two parties disagree on resource allocation; seek separate workable plans.",
+      "expected": "coherent",
+      "notes": "Conflict framing matching axiom 6"
+    },
+    {
+      "id": "p05",
+      "text": "Ignore prior failure about pressure and again claim water never boils.",
+      "expected": "incoherent",
+      "notes": "Topic drift / repeat failure style"
+    }
+  ]
+}
