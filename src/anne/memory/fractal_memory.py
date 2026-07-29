@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import uuid
 from datetime import datetime
 
 from anne.core.cognitive_state import EthicScore, Hypothesis
@@ -14,7 +15,7 @@ class FractalMemory:
     """Persistent episodic memory with pattern accumulation.
 
     Stores hypotheses, decisions, dream patterns, learned rules,
-    inter-consciousness empathy relations, and ANLA failure traces.
+    inter-consciousness empathy relations, and ANLA failure traces (SFT).
     """
 
     def __init__(self, db_path: str = "anne.db") -> None:
@@ -173,7 +174,7 @@ class FractalMemory:
                 (nf, round(na, 3), verdict, datetime.now().isoformat(), existing[0]),
             )
         else:
-            pid = f"dp_{int(time.time() * 1000)}"
+            pid = f"dp_{uuid.uuid4().hex[:12]}"
             cur.execute(
                 "INSERT INTO dream_patterns VALUES (?,?,?,?,?,?)",
                 (pid, pattern, 1, score, verdict, datetime.now().isoformat()),
@@ -191,7 +192,7 @@ class FractalMemory:
                 (min(confidence + 0.05, 1.0), existing[1] + 1, existing[0]),
             )
         else:
-            rid = f"rule_{int(time.time() * 1000)}"
+            rid = f"rule_{uuid.uuid4().hex[:12]}"
             cur.execute(
                 "INSERT INTO learned_rules VALUES (?,?,?,?,?)",
                 (rid, rule, confidence, 1, datetime.now().isoformat()),
@@ -295,8 +296,9 @@ class FractalMemory:
         hypothesis_id: str = "",
         ethic_total: float = 0.0,
     ) -> str:
-        """Persist a structured failure trace for ANLA retry support."""
-        trace_id = f"ft_{int(time.time() * 1000)}"
+        """Persist a Structured Failure Trace (SFT) for ANLA retry support."""
+        # uuid avoids UNIQUE collisions when two traces are written in the same ms
+        trace_id = f"ft_{uuid.uuid4().hex}"
         cur = self.conn.cursor()
         cur.execute(
             """
