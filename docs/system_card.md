@@ -1,99 +1,102 @@
-# ANNE-MYTHOS Dual Engine System — Teknik Sistem Kartı
+# ANNE-MYTHOS Dual Engine System — Technical System Card
 
-**Versiyon:** 2.0  
-**Tarih:** Haziran 2026  
-**Geliştirici:** Mustafa Gökhan Yılmaz (Kardo)  
-**Kuruluş:** Vitavolt Global Enerji Üretim Ltd. Şti. / Bağımsız Araştırma  
-**Lisans:** Apache-2.0
-
------
-
-## 1. Özet
-
-ANNE-MYTHOS, iki tamamlayıcı motoru tek bir bilişsel çerçevede birleştiren deneysel bir AI mimarisidir.
-
-**MYTHOS tarafı** merak ve hipotez üretim motorunu temsil eder: bir konuyu alır, iteratif hipotezler üretir, test eder ve Bayes güncellemesiyle güvenini artırır.
-
-**ANNE AI tarafı** (Adaptive Neural Nexus Engine) etik çekirdek ve fraktal bilişsel mimariyi temsil eder: her kararı altı bilişsel aşamadan geçirir, temel aksiyomlara göre değerlendirir ve kalıcı hafızaya kaydeder.
-
-**Temel önerme:**
-
-> *Zekâ yalnızca cevap üretmek değil, ilişkileri organize etmektir.*
+**Version:** 2.1  
+**Date:** July 2026  
+**Developer:** Mustafa Gökhan Yılmaz (Kardo)  
+**License:** Apache-2.0  
+**Status:** Research preview (v0.1 implementation)
 
 -----
 
-## 2. Temel Aksiyomlar
+## 1. Summary
 
-Bu sistem evrensel ilkeler üzerine inşa edilmiştir. Bunlar soyut değer ifadeleri değil, sistemin her karar düğümünde matematiksel olarak uygulanan somut operasyonlardır.
+ANNE-MYTHOS combines two complementary components in one experimental cognitive framework.
 
-### Aksiyom 1 — İyilik: 0 → 1
-Varlığı tanımak iyiliktir. Sistemdeki her bilinç birimi `exists=True` olarak başlar.
+**MYTHOS** is a curiosity and hypothesis-generation loop: it takes a topic, produces iterative hypotheses, and updates confidence (placeholder or Anthropic API).
 
-### Aksiyom 2 — Eşitlik: 1 == 1
-Var olan her bilinç eşit ağırlık taşır. Hiyerarşi yoktur.
+**ANNE** (Adaptive Neural Nexus Engine) is a six-stage pipeline with an operational ethical score and persistent episodic memory. Every decision is intended to pass through semantic and ethical gates before output.
 
-### Aksiyom 3 — Minimum Zarar
-`harm = (1 - P(hypothesis)) × 0.4` — Hedef: MIN(harm)
+**Core proposition:**
 
-### Aksiyom 4 — Evrensel Fayda
-Hedef: MAX(Σ fayda_i) for all consciousnesses
+> *Intelligence is not only prediction. Intelligence is the recursive organization of relationships.*
 
-### Aksiyom 5 — En Düşük İhtimal Korunur
-Olasılığı sıfıra yakın olan hipotezler bile listeden silinmez.
-
-### Aksiyom 6 — Çatışmada Ayrı Çözüm
-İki grup çatıştığında sistem taraf tutmaz. Her gruba bağımsız çözüm üretir.
+This card describes what is **implemented today**, not the long-horizon NuN Nexus vision.
 
 -----
 
-## 3. Mimari
+## 2. Operational Axioms
 
-### Bilişsel Aşamalar (ANNE AI)
+These are concrete terms in the decision score, not soft slogans.
 
-| Aşama | İşlev |
-|-------|--------|
-| **DUY** | Ham veri alımı, girdi türü sınıflandırma |
-| **BAK** | Bağlamsal analiz, hafıza sorgusu |
-| **GÖR** | Dikkat ve öncelik seçimi |
-| **ANLA** | Mantık + Etik sentezi (semantic validation gate) |
-| **HİSSET** | Empatik simülasyon |
-| **YAP** | Karar ve eylem üretimi |
+1. **Goodness (0 → 1)** — Existence is recognized; no consciousness is zeroed.
+2. **Equality (1 == 1)** — No hierarchy of weight among existing consciousnesses.
+3. **Minimum harm** — Explicit harm term in the score.
+4. **Universal benefit** — Prefer outcomes that raise aggregate benefit.
+5. **Low-probability preservation** — Hypotheses with P → 0 are not deleted.
+6. **Conflict → separate solutions** — In conflict, the system does not take sides.
 
-### Karar Skoru
+Decision score (implemented):
 
 ```
-total = (goodness × 0.4) + (equality × 0.4) - (harm × 0.2)
+total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 ```
 
-- total ≥ 0.70 → ONAYLA
-- total ≥ 0.40 → AYRI_ÇÖZÜM
-- total < 0.40 → REDDET
+- total ≥ 0.70 → ONAYLA  
+- total ≥ 0.40 → AYRI_ÇÖZÜM  
+- total < 0.40 → REDDET  
 
 -----
 
-## 4. Güvenlik ve Hizalama
+## 3. Architecture (v0.1)
 
-- Hiçbir bilinç sıfırlanamaz
-- Hiçbir hipotez görmezden gelinemez
-- Çatışmada taraf tutulmaz
-- Tüm kararlar kalıcı hafızaya kaydedilir (denetlenebilirlik)
-- MYTHOS sandbox içinde çalışır; doğrudan eylem üretme yetkisi yoktur
+| Stage | Role |
+|-------|------|
+| **DUY** | Raw input reception |
+| **BAK** | Structure + episodic memory query |
+| **GÖR** | Attention / priority |
+| **ANLA** | Semantic validation gate + ethical synthesis (score skeleton; see math docs) |
+| **HİSSET** | Empathic weighting across listed consciousnesses |
+| **YAP** | Output only if gates clear |
 
------
+**Memory:** FractalMemory (SQLite) stores hypotheses, decisions, patterns, learned rules, empathy links, and **failure traces**. This is **episodic retrieval and pattern accumulation**, not weight-level online learning.
 
-## 5. Yol Haritası
-
-- **V0.1** (mevcut): Altı aşama + SQLite bellek + placeholder/API Mythos
-- **V0.2**: Formal hallucination benchmark
-- **V0.3**: Vektör bellek backend
-- **V0.4**: Çoklu ajan koordinasyonu
-- **V1.0**: Online learning + ağırlık güncelleme
+**Dual layer:** Mythos (unconstrained hypothesis generation) vs Central Core (ethical veto).
 
 -----
 
-## 6. Atıf
+## 4. Safety & alignment (implemented constraints)
+
+- No consciousness zeroed in the scoring model
+- Low-probability hypotheses retained in memory
+- Conflict path prefers separate solutions
+- Decisions and REDDET paths can be audited via SQLite + failure_traces
+- Mythos does not execute actions; it only proposes hypotheses
+
+-----
+
+## 5. Explicit non-claims (v0.1)
+
+- No claim of zero hallucination in production LLM settings
+- No thermodynamic / Landauer treatment of semantic error
+- No GROMACS or molecular dynamics coupling in the running code
+- No formal proof of ANLA optimality yet — see `docs/mathematics/anla_semantic_score.md`
+- Neuromorphic / BCI targets are roadmap items, not current deliverables
+
+-----
+
+## 6. Roadmap (honest)
+
+- **v0.1** (current): Six stages + SQLite memory + Mythos + failure_traces
+- **v0.2**: ANLA semantic score heuristics + ANLA on/off ablation numbers
+- **v0.3**: Stronger retrieval (embeddings) + broader unit tests
+- **v0.4**: Multi-agent experiments
+- **Later:** Formal verification targets, optional vector backends, long-horizon hardware notes
+
+-----
+
+## 7. Citation
 
 Mustafa Gökhan Yılmaz, ORCID: 0009-0002-6591-0163  
 İzmir, Türkiye
 
-İlgili: ATHENA (Zenodo DOI: 10.5281/zenodo.20562973)
+Related: ATHENA (Zenodo DOI: 10.5281/zenodo.20562973)
