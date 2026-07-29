@@ -8,10 +8,12 @@
 > **Intelligence is not only prediction.  
 > Intelligence is the recursive organization of relationships.**
 
-ANNE is an open research platform exploring a **six-stage cognitive architecture** designed to address two fundamental limitations of current large language models:
+ANNE is an open **research platform** exploring a six-stage cognitive architecture aimed at two limitations of current large language models:
 
-1. The absence of a real-time **semantic validation loop** during inference (the primary mechanism of hallucination).
-2. The lack of a structurally embedded, **human-first ethical core** that operates before output generation.
+1. No real-time **semantic validation loop** during inference (a major driver of cascading hallucination).
+2. No structurally embedded, **human-first ethical core** before output generation.
+
+This repository ships a **v0.1 research preview**: a working pipeline, ethical score, SQLite episodic memory (including failure traces), and a Mythos curiosity loop. Long-horizon ideas (neuromorphic routing, formal VSA bridges, bio-coupling) belong in the roadmap — not in claims about the current binary.
 
 ---
 
@@ -26,27 +28,25 @@ Every input is processed through a mandatory six-stage pipeline:
 | 3 | **GÖR** (See) | Pattern matching + attention & priority selection |
 | 4 | **ANLA** (Understand) | **Semantic validation gate** + ethical synthesis |
 | 5 | **HİSSET** (Feel) | Empathic simulation across affected consciousnesses |
-| 6 | **YAP** (Do) | Output generation (only after all gates clear) |
+| 6 | **YAP** (Do) | Output generation (only after gates clear) |
 
-If **ANLA** fails semantic validation, the system returns to **DUY** carrying a failure trace — enabling failure-aware retry rather than blind regeneration.
+If **ANLA** fails validation, the system records a **failure trace** and is designed to return toward **DUY** with that meta-tag — failure-aware retry rather than blind regeneration. The formal score for ANLA is specified as a research skeleton in [`docs/mathematics/anla_semantic_score.md`](docs/mathematics/anla_semantic_score.md).
 
 ### Dual-Layer Processing
 
-- **Subconscious (Mythos)**: Unconstrained curiosity & hypothesis generation
-- **Central Core (ANNE)**: Ethical evaluation + veto authority
+- **Subconscious (Mythos):** Unconstrained curiosity & hypothesis generation
+- **Central Core (ANNE):** Ethical evaluation + veto authority
 
 ### Ethical Axioms (Operational)
 
-These are not soft guidelines. They are mathematical operations applied at every decision node:
+Applied as terms in the decision score (not slogans):
 
-1. **Goodness (0 → 1)**: Existence is recognized. No consciousness may be zeroed.
-2. **Equality (1 == 1)**: No hierarchy of weight among existing consciousnesses.
-3. **Minimum Harm**: Explicit harm minimization term in the decision score.
-4. **Universal Benefit**: Maximize aggregate benefit across all affected parties.
-5. **Low-Probability Preservation**: Hypotheses with P → 0 are never discarded.
-6. **Conflict → Separate Solutions**: In conflict, the system does not take sides.
-
-Decision score:
+1. **Goodness (0 → 1)** — Existence recognized; no consciousness zeroed
+2. **Equality (1 == 1)** — No hierarchy of weight among existing consciousnesses
+3. **Minimum Harm** — Explicit harm term
+4. **Universal Benefit** — Prefer higher aggregate benefit
+5. **Low-Probability Preservation** — Hypotheses with P → 0 are kept
+6. **Conflict → Separate Solutions** — System does not take sides
 
 ```
 total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
@@ -57,17 +57,13 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 ## Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/mgy421977-bit/anne.git
 cd anne
-
-# Install (editable)
 pip install -e ".[dev]"
 
 # Optional: Anthropic API for real hypothesis generation
 export ANTHROPIC_API_KEY="sk-ant-..."
 
-# Run basic example
 python examples/basic_pipeline.py
 ```
 
@@ -78,39 +74,42 @@ python examples/basic_pipeline.py
 ```
 anne/
 ├── src/anne/               # Core library (pipeline, ethic core, memory, mythos)
-├── applications/           # Independent applications built on the core
-│   ├── simulation_feedback/
-│   └── mother_ai/
-├── examples/               # Runnable demonstrations
-├── benchmarks/             # Hallucination & ethical decision benchmarks
-├── datasets/               # Future evaluation datasets
-├── docs/                   # Architecture, algorithms, mathematics, tutorials
-├── papers/                 # White papers, preprints, conference materials
-├── design/                 # Diagrams (Mermaid, SVG, Draw.io)
-├── research/               # Literature, decision logs, open questions
-├── governance/             # Vision, Mission, Research Charter
+├── applications/           # Independent apps on the same core
+├── examples/
+├── benchmarks/             # Ablation scaffolds & evaluation protocols
+├── datasets/
+├── docs/                   # Architecture, mathematics, system card
+├── papers/
+├── design/
+├── research/               # Decision logs, open questions, independent reviews
+├── governance/
 └── tests/
 ```
 
 ---
 
-## Status
+## Status (honest)
 
 **Research Preview (v0.1.0)**
 
-- Six-stage pipeline — implemented
-- Fractal episodic memory (SQLite) — implemented
-- Mythos curiosity loop — implemented (placeholder + Anthropic API)
-- Dream cycle (offline pattern synthesis) — implemented
-- Formal hallucination benchmarks — planned
-- Vector memory backend — planned
-- Multi-agent coordination — planned
+| Component | State |
+|-----------|--------|
+| Six-stage pipeline | Implemented |
+| Fractal episodic memory (SQLite) | Implemented |
+| Failure traces (ANLA retry support) | Implemented |
+| Mythos curiosity loop | Implemented (placeholder + Anthropic API) |
+| Dream cycle | Implemented |
+| ANLA formal semantic score | Skeleton only |
+| ANLA on/off ablation numbers | Scaffold only |
+| Vector memory / multi-agent | Planned |
+
+Episodic memory is **retrieval + pattern accumulation**, not weight-level online learning.
+
+Independent critique archive: [`research/reviews/`](research/reviews/).
 
 ---
 
 ## Citation
-
-If you use ANNE in academic work, please cite:
 
 ```bibtex
 @software{yilmaz2026anne,
@@ -123,7 +122,7 @@ If you use ANNE in academic work, please cite:
 }
 ```
 
-Or use the `CITATION.cff` file.
+Or use `CITATION.cff`.
 
 ---
 
