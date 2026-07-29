@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 import uuid
 from datetime import datetime
 
@@ -326,7 +325,7 @@ class FractalMemory:
             """
             SELECT id, cycle_id, stage, reason, meta_tag, ethic_total, created_at
             FROM failure_traces
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, rowid DESC
             LIMIT ?
             """,
             (limit,),
