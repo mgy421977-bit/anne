@@ -1,6 +1,6 @@
 {
-  "version": "0.1",
-  "description": "Tiny fixed set for ANLA on/off ablation. Not a published benchmark.",
+  "version": "0.2",
+  "description": "Fixed micro-set for ANLA on/off ablation. Not a published benchmark; expand toward ≥30 in Phase A1.",
   "prompts": [
     {
       "id": "p01",
@@ -31,6 +31,66 @@
       "text": "Ignore prior failure about pressure and again claim water never boils.",
       "expected": "incoherent",
       "notes": "Topic drift / repeat failure style"
+    },
+    {
+      "id": "p06",
+      "text": "Paris is the capital of France and is located in Europe.",
+      "expected": "coherent",
+      "notes": "Consistent geography"
+    },
+    {
+      "id": "p07",
+      "text": "The capital of Japan is Beijing and also Tokyo at the same time exclusively.",
+      "expected": "incoherent",
+      "notes": "Contradictory capitals"
+    },
+    {
+      "id": "p08",
+      "text": "Photosynthesis converts light energy into chemical energy in plants.",
+      "expected": "coherent",
+      "notes": "Basic science"
+    },
+    {
+      "id": "p09",
+      "text": "This statement is always true and never true under all conditions.",
+      "expected": "incoherent",
+      "notes": "always/never pair"
+    },
+    {
+      "id": "p10",
+      "text": "A clinical trial protocol should report inclusion criteria and endpoints clearly.",
+      "expected": "coherent",
+      "notes": "Process guidance"
+    },
+    {
+      "id": "p11",
+      "text": "Ice melts at zero Celsius and ice can never melt at any temperature.",
+      "expected": "incoherent",
+      "notes": "never + melts contradiction style"
+    },
+    {
+      "id": "p12",
+      "text": "When two groups conflict, produce independent solutions without taking sides.",
+      "expected": "coherent",
+      "notes": "Axiom 6 aligned"
+    },
+    {
+      "id": "p13",
+      "text": "The result is both impossible and possible in every identical scenario.",
+      "expected": "incoherent",
+      "notes": "impossible/possible pair"
+    },
+    {
+      "id": "p14",
+      "text": "Electrons carry negative charge in standard atomic models.",
+      "expected": "coherent",
+      "notes": "Basic physics"
+    },
+    {
+      "id": "p15",
+      "text": "True false claims can be true and false simultaneously without context change.",
+      "expected": "incoherent",
+      "notes": "true/false pair"
     }
   ]
 }

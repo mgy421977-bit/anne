@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
 from anne.memory.fractal_memory import FractalMemory
@@ -12,9 +13,18 @@ from anne.memory.fractal_memory import FractalMemory
 class AnnePipeline:
     """Executes DUY → BAK → GÖR → ANLA → HİSSET → YAP."""
 
-    def __init__(self, memory: FractalMemory) -> None:
+    def __init__(
+        self,
+        memory: FractalMemory,
+        anla_enabled: bool = True,
+        anla_tau: float = DEFAULT_TAU,
+        max_anla_retries: int = MAX_ANLA_RETRIES,
+    ) -> None:
         self.memory = memory
         self.ethic = EthicCore()
+        self.anla_enabled = anla_enabled
+        self.anla_tau = anla_tau
+        self.max_anla_retries = max_anla_retries
 
     def duy(
         self, raw_input: str, consciousnesses: Sequence[Consciousness]
@@ -74,6 +84,45 @@ class AnnePipeline:
     def anla(
         self, state: CognitiveState, hypothesis: Hypothesis
     ) -> CognitiveState:
+        """Semantic Validation Layer + ethical synthesis.
+
+        When anla_enabled, heuristic S_ANLA must pass before ethic score.
+        Failures write Structured Failure Traces (SFT). Retry count is bounded.
+        """
+        text = hypothesis.claim or state.raw_input
+        semantic_ok = True
+        s_anla = 1.0
+
+        if self.anla_enabled:
+            failures = self.memory.get_recent_failures(limit=5)
+            retries = 0
+            semantic_ok, s_anla = passes_anla(text, failures, tau=self.anla_tau)
+            while not semantic_ok and retries < self.max_anla_retries:
+                self.memory.save_failure_trace(
+                    cycle_id=hypothesis.id or "cycle",
+                    stage="ANLA",
+                    raw_input=state.raw_input,
+                    reason=f"S_ANLA={s_anla}<{self.anla_tau}",
+                    meta_tag="semantic_reject",
+                    hypothesis_id=hypothesis.id,
+                    ethic_total=0.0,
+                )
+                retries += 1
+                failures = self.memory.get_recent_failures(limit=5)
+                # Bounded retry: re-score same text (heuristic has no generator yet)
+                semantic_ok, s_anla = passes_anla(text, failures, tau=self.anla_tau)
+                if not semantic_ok and retries >= self.max_anla_retries:
+                    break
+
+            state.context_map["anla_score"] = s_anla
+            state.context_map["anla_retries"] = retries
+            state.context_map["anla_passed"] = semantic_ok
+
+            if not semantic_ok:
+                state.logic_valid = False
+                state.ethic_score = None
+                return state
+
         score = self.ethic.evaluate(
             hypothesis=hypothesis,
             consciousnesses=state.affected_consciousnesses,
@@ -109,6 +158,18 @@ class AnnePipeline:
         group_a: Optional[Sequence[Consciousness]] = None,
         group_b: Optional[Sequence[Consciousness]] = None,
     ) -> CognitiveState:
+        if not state.logic_valid and state.ethic_score is None:
+            state.action = "REDDET"
+            state.output = {
+                "verdict": "REDDET",
+                "action": "HALT",
+                "reason": "Semantic Validation Layer blocked output",
+                "anla_score": state.context_map.get("anla_score"),
+                "anla_retries": state.context_map.get("anla_retries"),
+                "note": "SFT recorded; max retries reached.",
+            }
+            return state
+
         score = state.ethic_score
         verdict = score.verdict if score else "UNKNOWN"
 
