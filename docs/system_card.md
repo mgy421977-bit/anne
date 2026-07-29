@@ -1,6 +1,6 @@
 # ANNE-MYTHOS Dual Engine System — Technical System Card
 
-**Version:** 2.1  
+**Version:** 2.2  
 **Date:** July 2026  
 **Developer:** Mustafa Gökhan Yılmaz (Kardo)  
 **License:** Apache-2.0  
@@ -10,17 +10,16 @@
 
 ## 1. Summary
 
-ANNE-MYTHOS combines two complementary components in one experimental cognitive framework.
+ANNE is an open **cognitive architecture research platform**. It explores whether a **Semantic Validation Layer**, operational **ethical constraints**, and **Structured Failure Traces (SFT)** can improve reliability of foundation-model outputs when applied as an orchestration layer before delivery.
 
-**MYTHOS** is a curiosity and hypothesis-generation loop: it takes a topic, produces iterative hypotheses, and updates confidence (placeholder or Anthropic API).
+**MYTHOS** is the curiosity / hypothesis-generation loop (placeholder or Anthropic API).  
+**ANNE** is the six-stage pipeline with ethical score and episodic memory.
 
-**ANNE** (Adaptive Neural Nexus Engine) is a six-stage pipeline with an operational ethical score and persistent episodic memory. Every decision is intended to pass through semantic and ethical gates before output.
+This card describes what is **implemented today**, not the long-horizon NuN Nexus vision.
 
 **Core proposition:**
 
 > *Intelligence is not only prediction. Intelligence is the recursive organization of relationships.*
-
-This card describes what is **implemented today**, not the long-horizon NuN Nexus vision.
 
 -----
 
@@ -49,16 +48,16 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 
 ## 3. Architecture (v0.1)
 
-| Stage | Role |
-|-------|------|
-| **DUY** | Raw input reception |
-| **BAK** | Structure + episodic memory query |
-| **GÖR** | Attention / priority |
-| **ANLA** | Semantic validation gate + ethical synthesis (score skeleton; see math docs) |
-| **HİSSET** | Empathic weighting across listed consciousnesses |
-| **YAP** | Output only if gates clear |
+| Code | EN alias | Role |
+|------|----------|------|
+| **DUY** | Perceive | Raw input reception |
+| **BAK** | Observe | Structure + episodic memory query |
+| **GÖR** | Recognize | Attention / priority |
+| **ANLA** | Understand | Semantic Validation Layer + ethical synthesis |
+| **HİSSET** | Evaluate | Empathic / contextual weighting |
+| **YAP** | Act | Output only if prior stages clear |
 
-**Memory:** FractalMemory (SQLite) stores hypotheses, decisions, patterns, learned rules, empathy links, and **failure traces**. This is **episodic retrieval and pattern accumulation**, not weight-level online learning.
+**Memory:** FractalMemory (SQLite) stores hypotheses, decisions, patterns, learned rules, empathy links, and **Structured Failure Traces (SFT)**. This is **episodic retrieval and pattern accumulation**, not weight-level online learning.
 
 **Dual layer:** Mythos (unconstrained hypothesis generation) vs Central Core (ethical veto).
 
@@ -69,7 +68,7 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 - No consciousness zeroed in the scoring model
 - Low-probability hypotheses retained in memory
 - Conflict path prefers separate solutions
-- Decisions and REDDET paths can be audited via SQLite + failure_traces
+- Decisions and REDDET paths can be audited via SQLite + SFTs
 - Mythos does not execute actions; it only proposes hypotheses
 
 -----
@@ -86,7 +85,7 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 
 ## 6. Roadmap (honest)
 
-- **v0.1** (current): Six stages + SQLite memory + Mythos + failure_traces
+- **v0.1** (current): Six stages + SQLite memory + Mythos + SFT
 - **v0.2**: ANLA semantic score heuristics + ANLA on/off ablation numbers
 - **v0.3**: Stronger retrieval (embeddings) + broader unit tests
 - **v0.4**: Multi-agent experiments

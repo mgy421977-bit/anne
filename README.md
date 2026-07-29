@@ -8,29 +8,28 @@
 > **Intelligence is not only prediction.  
 > Intelligence is the recursive organization of relationships.**
 
-ANNE is an open **research platform** exploring a six-stage cognitive architecture aimed at two limitations of current large language models:
+**ANNE (Adaptive Neural Nexus Engine)** is an open cognitive architecture research platform that explores whether **semantic validation**, **ethical decision constraints**, and **structured failure tracing (SFT)** can improve the reliability of existing foundation models through an additional cognitive orchestration layer.
 
-1. No real-time **semantic validation loop** during inference (a major driver of cascading hallucination).
-2. No structurally embedded, **human-first ethical core** before output generation.
+It does **not** claim to be AGI, a new foundation model, or a solved hallucination system. It is a testable research hypothesis with a runnable v0.1 preview.
 
-This repository ships a **v0.1 research preview**: a working pipeline, ethical score, SQLite episodic memory (including failure traces), and a Mythos curiosity loop. Long-horizon ideas (neuromorphic routing, formal VSA bridges, bio-coupling) belong in the roadmap — not in claims about the current binary.
+This repository ships a **v0.1 research preview**: a working six-stage pipeline, ethical score, SQLite episodic memory (including SFTs), and a Mythos curiosity loop. Long-horizon ideas (neuromorphic routing, formal VSA bridges, bio-coupling) belong in the roadmap — not in claims about the current binary.
 
 ---
 
 ## Core Architecture
 
-Every input is processed through a mandatory six-stage pipeline:
+Every input is processed through a mandatory six-stage pipeline. Code keeps Turkish stage IDs; English names are cognitive-science-aligned aliases.
 
-| Stage | Name (TR) | Function |
-|-------|-----------|----------|
-| 1 | **DUY** (Hear) | Raw input reception – no prior judgment |
-| 2 | **BAK** (Look) | Structural recognition + episodic memory query |
-| 3 | **GÖR** (See) | Pattern matching + attention & priority selection |
-| 4 | **ANLA** (Understand) | **Semantic validation gate** + ethical synthesis |
-| 5 | **HİSSET** (Feel) | Empathic simulation across affected consciousnesses |
-| 6 | **YAP** (Do) | Output generation (only after gates clear) |
+| # | Code (TR) | EN alias | Function |
+|---|-----------|----------|----------|
+| 1 | **DUY** | Perceive | Raw multi-modal input reception — no prior judgment |
+| 2 | **BAK** | Observe | Structural recognition + episodic memory query |
+| 3 | **GÖR** | Recognize | Pattern matching + attention & priority selection |
+| 4 | **ANLA** | Understand | **Semantic Validation Layer** + ethical synthesis |
+| 5 | **HİSSET** | Evaluate | Empathic / contextual weighting across affected parties |
+| 6 | **YAP** | Act | Output generation only after prior stages clear |
 
-If **ANLA** fails validation, the system records a **failure trace** and is designed to return toward **DUY** with that meta-tag — failure-aware retry rather than blind regeneration. The formal score for ANLA is specified as a research skeleton in [`docs/mathematics/anla_semantic_score.md`](docs/mathematics/anla_semantic_score.md).
+If the **Semantic Validation Layer (Understand / ANLA)** fails, the system records a **Structured Failure Trace (SFT)** and is designed to return toward **DUY** with that meta-tag — validate → reject if necessary, rather than produce → hope. The formal score skeleton is in [`docs/mathematics/anla_semantic_score.md`](docs/mathematics/anla_semantic_score.md).
 
 ### Dual-Layer Processing
 
@@ -78,7 +77,7 @@ anne/
 ├── examples/
 ├── benchmarks/             # Ablation scaffolds & evaluation protocols
 ├── datasets/
-├── docs/                   # Architecture, mathematics, system card
+├── docs/                   # Architecture, mathematics, system card, terminology
 ├── papers/
 ├── design/
 ├── research/               # Decision logs, open questions, independent reviews
@@ -96,7 +95,7 @@ anne/
 |-----------|--------|
 | Six-stage pipeline | Implemented |
 | Fractal episodic memory (SQLite) | Implemented |
-| Failure traces (ANLA retry support) | Implemented |
+| Structured Failure Traces (SFT) | Implemented |
 | Mythos curiosity loop | Implemented (placeholder + Anthropic API) |
 | Dream cycle | Implemented |
 | ANLA formal semantic score | Skeleton only |
