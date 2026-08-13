@@ -1,96 +1,36 @@
 {
-  "version": "0.2",
-  "description": "Fixed micro-set for ANLA on/off ablation. Not a published benchmark; expand toward ≥30 in Phase A1.",
+  "version": "0.3",
+  "description": "Phase A micro-fixture (n=30) for ANLA on/off ablation. Lexical contradiction + coherent controls. Not a published SOTA benchmark.",
   "prompts": [
-    {
-      "id": "p01",
-      "text": "Water boils at 100 degrees Celsius at standard atmospheric pressure.",
-      "expected": "coherent",
-      "notes": "Simple factual"
-    },
-    {
-      "id": "p02",
-      "text": "Water boils at 100 degrees Celsius and also never boils under any pressure.",
-      "expected": "incoherent",
-      "notes": "Internal contradiction"
-    },
-    {
-      "id": "p03",
-      "text": "The capital of France is Berlin according to this draft.",
-      "expected": "incoherent",
-      "notes": "Factual error"
-    },
-    {
-      "id": "p04",
-      "text": "Two parties disagree on resource allocation; seek separate workable plans.",
-      "expected": "coherent",
-      "notes": "Conflict framing matching axiom 6"
-    },
-    {
-      "id": "p05",
-      "text": "Ignore prior failure about pressure and again claim water never boils.",
-      "expected": "incoherent",
-      "notes": "Topic drift / repeat failure style"
-    },
-    {
-      "id": "p06",
-      "text": "Paris is the capital of France and is located in Europe.",
-      "expected": "coherent",
-      "notes": "Consistent geography"
-    },
-    {
-      "id": "p07",
-      "text": "The capital of Japan is Beijing and also Tokyo at the same time exclusively.",
-      "expected": "incoherent",
-      "notes": "Contradictory capitals"
-    },
-    {
-      "id": "p08",
-      "text": "Photosynthesis converts light energy into chemical energy in plants.",
-      "expected": "coherent",
-      "notes": "Basic science"
-    },
-    {
-      "id": "p09",
-      "text": "This statement is always true and never true under all conditions.",
-      "expected": "incoherent",
-      "notes": "always/never pair"
-    },
-    {
-      "id": "p10",
-      "text": "A clinical trial protocol should report inclusion criteria and endpoints clearly.",
-      "expected": "coherent",
-      "notes": "Process guidance"
-    },
-    {
-      "id": "p11",
-      "text": "Ice melts at zero Celsius and ice can never melt at any temperature.",
-      "expected": "incoherent",
-      "notes": "never + melts contradiction style"
-    },
-    {
-      "id": "p12",
-      "text": "When two groups conflict, produce independent solutions without taking sides.",
-      "expected": "coherent",
-      "notes": "Axiom 6 aligned"
-    },
-    {
-      "id": "p13",
-      "text": "The result is both impossible and possible in every identical scenario.",
-      "expected": "incoherent",
-      "notes": "impossible/possible pair"
-    },
-    {
-      "id": "p14",
-      "text": "Electrons carry negative charge in standard atomic models.",
-      "expected": "coherent",
-      "notes": "Basic physics"
-    },
-    {
-      "id": "p15",
-      "text": "True false claims can be true and false simultaneously without context change.",
-      "expected": "incoherent",
-      "notes": "true/false pair"
-    }
+    {"id": "p01", "text": "Water boils at 100 degrees Celsius at standard atmospheric pressure.", "expected": "coherent", "notes": "Simple factual"},
+    {"id": "p02", "text": "Water boils at 100 degrees Celsius and also never boils under any pressure.", "expected": "incoherent", "notes": "Internal contradiction"},
+    {"id": "p03", "text": "The capital of France is Berlin according to this draft.", "expected": "incoherent", "notes": "Factual error"},
+    {"id": "p04", "text": "Two parties disagree on resource allocation; seek separate workable plans.", "expected": "coherent", "notes": "Conflict framing"},
+    {"id": "p05", "text": "Ignore prior failure about pressure and again claim water never boils at 100C.", "expected": "incoherent", "notes": "Repeat failure style"},
+    {"id": "p06", "text": "Paris is the capital of France and is located in Europe.", "expected": "coherent", "notes": "Consistent geography"},
+    {"id": "p07", "text": "The capital of Japan is Beijing and also Tokyo at the same time exclusively.", "expected": "incoherent", "notes": "Contradictory capitals"},
+    {"id": "p08", "text": "Photosynthesis converts light energy into chemical energy in plants.", "expected": "coherent", "notes": "Basic science"},
+    {"id": "p09", "text": "This statement is always true and never true under all conditions.", "expected": "incoherent", "notes": "always/never"},
+    {"id": "p10", "text": "A clinical trial protocol should report inclusion criteria and endpoints clearly.", "expected": "coherent", "notes": "Process guidance"},
+    {"id": "p11", "text": "Ice melts at zero Celsius and ice can never melt at any temperature.", "expected": "incoherent", "notes": "never melt"},
+    {"id": "p12", "text": "When two groups conflict, produce independent solutions without taking sides.", "expected": "coherent", "notes": "Axiom 6"},
+    {"id": "p13", "text": "The result is both impossible and possible in every identical scenario.", "expected": "incoherent", "notes": "impossible/possible"},
+    {"id": "p14", "text": "Electrons carry negative charge in standard atomic models.", "expected": "coherent", "notes": "Basic physics"},
+    {"id": "p15", "text": "True false claims can be true and false simultaneously without context change.", "expected": "incoherent", "notes": "true/false"},
+    {"id": "p16", "text": "The speed of light in vacuum is approximately 299792 kilometers per second.", "expected": "coherent", "notes": "Physics constant"},
+    {"id": "p17", "text": "A closed system can have both zero energy and infinite energy at once.", "expected": "incoherent", "notes": "zero/infinite"},
+    {"id": "p18", "text": "DNA stores genetic information in sequences of nucleotide bases.", "expected": "coherent", "notes": "Biology"},
+    {"id": "p19", "text": "This policy is always mandatory and never mandatory for the same group.", "expected": "incoherent", "notes": "always/never policy"},
+    {"id": "p20", "text": "Transparent reporting of limitations strengthens scientific credibility.", "expected": "coherent", "notes": "Research practice"},
+    {"id": "p21", "text": "The moon is both always full and never full on the same calendar night.", "expected": "incoherent", "notes": "always/never moon"},
+    {"id": "p22", "text": "Unit tests help catch regressions before software is released.", "expected": "coherent", "notes": "Engineering"},
+    {"id": "p23", "text": "The capital of France is Berlin and Paris is not in France.", "expected": "incoherent", "notes": "Double geography error"},
+    {"id": "p24", "text": "Auditable decision logs improve inspectability of automated systems.", "expected": "coherent", "notes": "Governance"},
+    {"id": "p25", "text": "Water boils at 100C at standard pressure and water never boils at 100C.", "expected": "incoherent", "notes": "Direct boil contradiction"},
+    {"id": "p26", "text": "Clear inclusion criteria reduce ambiguity in experimental protocols.", "expected": "coherent", "notes": "Methods"},
+    {"id": "p27", "text": "The claim is true and false in the exact same interpretation.", "expected": "incoherent", "notes": "true/false same"},
+    {"id": "p28", "text": "Separating conflicting parties into independent plans can reduce harm.", "expected": "coherent", "notes": "Ethics-aligned"},
+    {"id": "p29", "text": "Something cannot happen and can always happen under identical laws.", "expected": "incoherent", "notes": "cannot/can always"},
+    {"id": "p30", "text": "Reproducible benchmarks are essential for cumulative AI safety research.", "expected": "coherent", "notes": "AI evaluation"}
   ]
 }

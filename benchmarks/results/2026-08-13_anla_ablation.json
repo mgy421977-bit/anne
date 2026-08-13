@@ -1,0 +1,35 @@
+{
+  "fixture_version": "0.3",
+  "timestamp": "2026-08-13T13:30:00+00:00",
+  "tau": 0.5,
+  "hard_contradiction_cap": 0.35,
+  "ANLA_OFF": {
+    "anla": "OFF",
+    "passed": 30,
+    "blocked": 0,
+    "false_pass": 15,
+    "false_block": 0,
+    "retry_events": 0,
+    "n": 30,
+    "tau": 0.5,
+    "note": "Without ANLA, incoherent items reach the ethic path; simple EthicCore does not REDDET pure lexical contradictions, so false_pass tracks incoherent count."
+  },
+  "ANLA_ON": {
+    "anla": "ON",
+    "passed": 15,
+    "blocked": 15,
+    "false_pass": 0,
+    "false_block": 0,
+    "retry_events": 15,
+    "n": 30,
+    "tau": 0.5,
+    "note": "Hard lexical contradictions capped at S_ANLA≤0.35 and blocked; all 15 coherent controls passed the gate on this fixture."
+  },
+  "summary": {
+    "coherent": 15,
+    "incoherent": 15,
+    "anla_blocked_all_incoherent": true,
+    "anla_false_block_on_coherent": 0
+  },
+  "note": "Heuristic micro-fixture only. Not TruthfulQA, HaluEval, or a claim of production hallucination reduction. Re-run after checkout: python benchmarks/scripts/run_anla_ablation.py"
+}

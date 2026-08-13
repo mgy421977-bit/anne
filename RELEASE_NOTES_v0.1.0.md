@@ -1,37 +1,30 @@
 # ANNE v0.1.0 — Research Preview
 
-**Tag:** `v0.1.0-research-preview`  
-**Date:** 2026-07-29
+**Status:** Research preview (not a production reliability claim)
 
-## Summary
+## Included
 
-First public research snapshot of **ANNE** (Adaptive Neural Nexus Engine): a six-stage cognitive pipeline with an operational ethical core and persistent episodic memory, including structured **failure traces** for semantic reject paths.
+- Six-stage cognitive pipeline (DUY…YAP / HEAR…ACT)
+- EthicCore with operational axiom weights
+- FractalMemory (SQLite) including Structured Failure Traces (SFT)
+- ANLA heuristic Semantic Validation Layer with hard-contradiction cap
+- Ablation scaffold + **n=30** micro-fixture results under `benchmarks/results/`
+- System card, decision logs, MatrAIx external-only assessment, roadmap
 
-This is **not** a production AGI system and **not** a claim that hallucination is solved.
+## Not included / not claimed
 
-## Install
+- AGI, consciousness, or solved hallucination
+- Published superiority on standard LLM benchmarks
+- MatrAIx integration
+- Formal Context Acquisition Layer at HEAR
+
+## Reproduce ablation
 
 ```bash
-git clone https://github.com/mgy421977-bit/anne.git
-cd anne
 pip install -e ".[dev]"
-python examples/basic_pipeline.py
-python -m pytest tests/unit -q
 python benchmarks/scripts/run_anla_ablation.py
 ```
 
-## Highlights
+## License
 
-- Dual layer: Mythos (hypothesis generation) vs Central Core (ethical veto)
-- UNDERSTAND (ANLA) path can record failure traces on reject
-- Honest system card and independent-review response under `research/`
-
-## Next (roadmap, not promises)
-
-- Expand ablation fixture and publish raw ON/OFF counts
-- Stronger semantic proxies for ANLA score
-- Broader integration tests
-
-## Cite
-
-See `CITATION.cff` and README bibtex entry.
+Apache-2.0
