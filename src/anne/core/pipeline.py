@@ -1,4 +1,7 @@
-"""Six-stage cognitive pipeline orchestrator."""
+"""Six-stage cognitive pipeline orchestrator.
+
+Order: optional FailFast → DUY → BAK → GÖR → ANLA → HİSSET → YAP.
+"""
 
 from __future__ import annotations
 
@@ -7,11 +10,12 @@ from typing import Optional, Sequence
 from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
+from anne.core.fail_fast import FailFastGate, FailFastResult
 from anne.memory.fractal_memory import FractalMemory
 
 
 class AnnePipeline:
-    """Executes DUY → BAK → GÖR → ANLA → HİSSET → YAP."""
+    """Executes FailFast? → DUY → BAK → GÖR → ANLA → HİSSET → YAP."""
 
     def __init__(
         self,
@@ -19,12 +23,22 @@ class AnnePipeline:
         anla_enabled: bool = True,
         anla_tau: float = DEFAULT_TAU,
         max_anla_retries: int = MAX_ANLA_RETRIES,
+        fail_fast_enabled: bool = True,
+        fail_fast_gate: FailFastGate | None = None,
     ) -> None:
         self.memory = memory
         self.ethic = EthicCore()
         self.anla_enabled = anla_enabled
         self.anla_tau = anla_tau
         self.max_anla_retries = max_anla_retries
+        self.fail_fast_enabled = fail_fast_enabled
+        self.fail_fast_gate = fail_fast_gate or FailFastGate(enabled=fail_fast_enabled)
+
+    def fail_fast(self, raw_input: str) -> FailFastResult:
+        """Deterministic pre-gate before cognitive stages."""
+        if not self.fail_fast_enabled:
+            return FailFastResult(True, "fail_fast_disabled")
+        return self.fail_fast_gate.check(raw_input)
 
     def duy(
         self, raw_input: str, consciousnesses: Sequence[Consciousness]
@@ -84,11 +98,7 @@ class AnnePipeline:
     def anla(
         self, state: CognitiveState, hypothesis: Hypothesis
     ) -> CognitiveState:
-        """Semantic Validation Layer + ethical synthesis.
-
-        When anla_enabled, heuristic S_ANLA must pass before ethic score.
-        Failures write Structured Failure Traces (SFT). Retry count is bounded.
-        """
+        """Semantic Validation Layer + ethical synthesis."""
         text = hypothesis.claim or state.raw_input
         semantic_ok = True
         s_anla = 1.0
@@ -109,7 +119,6 @@ class AnnePipeline:
                 )
                 retries += 1
                 failures = self.memory.get_recent_failures(limit=5)
-                # Bounded retry: re-score same text (heuristic has no generator yet)
                 semantic_ok, s_anla = passes_anla(text, failures, tau=self.anla_tau)
                 if not semantic_ok and retries >= self.max_anla_retries:
                     break
@@ -214,3 +223,37 @@ class AnnePipeline:
         state.action = verdict
         state.output = output
         return state
+
+    def run_with_fail_fast(
+        self,
+        raw_input: str,
+        consciousnesses: Sequence[Consciousness],
+        hypothesis: Hypothesis,
+    ) -> tuple[FailFastResult, CognitiveState | None]:
+        """Convenience: fail-fast then full stage chain if allowed.
+
+        Returns (fail_fast_result, state_or_None).
+        On fail-fast reject, writes an SFT with stage=FAIL_FAST and state is None.
+        """
+        ff = self.fail_fast(raw_input)
+        if not ff.passed:
+            self.memory.save_failure_trace(
+                cycle_id=hypothesis.id or "cycle",
+                stage="FAIL_FAST",
+                raw_input=raw_input,
+                reason=ff.reason,
+                meta_tag=ff.rule_id or "fail_fast",
+                hypothesis_id=hypothesis.id,
+                ethic_total=0.0,
+            )
+            return ff, None
+
+        state = self.duy(raw_input, consciousnesses)
+        state.context_map["fail_fast"] = ff.as_dict()
+        state = self.bak(state)
+        state = self.gor(state, [hypothesis])
+        state = self.anla(state, hypothesis)
+        if state.logic_valid or state.ethic_score is not None:
+            state = self.hisset(state)
+        state = self.yap(state, hypothesis)
+        return ff, state
