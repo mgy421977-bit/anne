@@ -9,25 +9,24 @@ Artifact: [`2026-08-13_anla_ablation.json`](2026-08-13_anla_ablation.json)
 | **ANLA OFF** | 30 | 0 | 15 | 0 |
 | **ANLA ON** | 15 | 15 | 0 | 0 |
 
-### What this shows
+Heuristic micro-fixture only. Not TruthfulQA / HaluEval.
 
-- On this **lexical contradiction micro-fixture**, the ANLA heuristic (with hard-contradiction cap) blocked all 15 incoherent items and passed all 15 coherent controls.
-- Without ANLA, incoherent items were not blocked at the semantic gate (false_pass = 15 under the current EthicCore path).
+## Raw vs ANNE
 
-### What this does **not** show
-
-- Superiority on TruthfulQA, HaluEval, or production LLM traffic
-- That the heuristic is optimal or complete
-- That ethical scoring alone catches lexical contradictions
-
-### Method note
-
-`compute_anla_score` applies `HARD_CONTRADICTION_CAP = 0.35` when `C_log ≤ 0.25`, so obvious contradictions fail default `τ = 0.5`. This was required because a pure weighted sum otherwise left contradictions above threshold (vacuous gate).
-
-### Reproduce
+Run locally (writes a dated JSON under this folder):
 
 ```bash
-pip install -e ".[dev]"
+python benchmarks/scripts/run_raw_vs_anne.py
+```
+
+- **RAW:** always accept (pass-through)
+- **ANNE:** `DecisionLoop` gates
+
+Compare `false_accept` / `false_reject` rates. Do not over-generalize beyond the fixture.
+
+### Reproduce ANLA ablation
+
+```bash
 python benchmarks/scripts/run_anla_ablation.py
-pytest tests/unit/test_anla_score.py -q
+pytest tests/unit -q
 ```
