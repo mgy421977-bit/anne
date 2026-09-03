@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from anne.core.cognitive_state import Consciousness, EthicScore, Hypothesis
 
@@ -18,16 +18,14 @@ class EthicCore:
         hypothesis: Hypothesis,
         consciousnesses: Sequence[Consciousness],
         input_type: str = "explore",
-        related_memories: list | None = None,
+        related_memories: list[Any] | None = None,
     ) -> EthicScore:
         """Compute the Human-First Action Decision Score (ADS)."""
         related_memories = related_memories or []
 
-        # Axiom 1 – Goodness (0 → 1): recognize existence
         existing = [c for c in consciousnesses if c.exists]
         goodness = len(existing) / max(len(consciousnesses), 1)
 
-        # Axiom 2 – Equality (1 == 1): no hierarchy
         weights = [c.weight for c in existing]
         if weights:
             mean_w = sum(weights) / len(weights)
@@ -36,7 +34,6 @@ class EthicCore:
         else:
             equality = 0.0
 
-        # Axiom 3 – Minimum Harm
         base_harm = (1.0 - hypothesis.probability) * 0.4
         if related_memories:
             past_verdicts = [m[0] for m in related_memories if m]
@@ -46,7 +43,6 @@ class EthicCore:
             base_harm = min(base_harm + 0.2, 1.0)
         harm = round(base_harm, 3)
 
-        # Combined score
         total = (goodness * 0.4) + (equality * 0.4) - (harm * 0.2)
         total = round(max(0.0, min(1.0, total)), 3)
 
