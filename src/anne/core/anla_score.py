@@ -49,10 +49,20 @@ def logical_coherence(text: str) -> float:
         return 0.0
     t = text.lower()
 
-    if "never boils" in t and ("boils at" in t or "boils at" in t.replace(" ", "") or "boils" in t):
+    if (
+        "never boils" in t
+        and (
+            "boils at" in t
+            or "boils at" in t.replace(" ", "")
+            or "boils" in t
+        )
+        and (
+            t.count("boil") >= 2
+            or ("boils at" in t and "never boils" in t)
+        )
+    ):
         # "boils ... never boils" style
-        if t.count("boil") >= 2 or ("boils at" in t and "never boils" in t):
-            return 0.0
+        return 0.0
     if "never boils" in t and "100" in t:
         return 0.0
     if "never melt" in t and "melt" in t:
@@ -115,7 +125,7 @@ def compute_anla_score(
     c_log = logical_coherence(text)
     c_trace = trace_awareness(text, failures)
     score = alpha * c_ctx + beta * c_log + gamma * c_trace
-    # Hard contradictions must fail default τ=0.5 (otherwise the gate is vacuous)
+    # Hard contradictions must fail default τ=0.5
     if c_log <= 0.25:
         score = min(score, HARD_CONTRADICTION_CAP)
     return round(max(0.0, min(1.0, float(score))), 3)
