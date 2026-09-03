@@ -44,7 +44,7 @@ The Tinker can attach research material before sending a request. Supported inpu
 
 Pipeline First can optionally pass its result and source material to Gemini for a second analysis pass looking for hidden assumptions, contradictions, or alternative interpretations that the deterministic layer may miss.
 
-The default Gemini model is `gemini-3.7-flash`. OpenRouter remains available as an alternative provider. Gemini's current model catalog lists `gemini-3.7-flash` as a stable model for coding, agentic workflows, and multi-step execution. citeturn701547search0turn701547search2
+The default Gemini model is `gemini-3.7-flash`. OpenRouter remains available as an alternative provider.
 
 ## Memory and safety
 
