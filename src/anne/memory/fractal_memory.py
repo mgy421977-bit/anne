@@ -6,8 +6,9 @@ import json
 import sqlite3
 import uuid
 from datetime import datetime
+from typing import Any
 
-from anne.core.cognitive_state import EthicScore, Hypothesis
+from anne.core.cognitive_state import Consciousness, EthicScore, Hypothesis
 
 
 class FractalMemory:
@@ -133,7 +134,7 @@ class FractalMemory:
         decision_id: str,
         hyp_id: str,
         score: EthicScore,
-        consciousnesses: list,
+        consciousnesses: list[Consciousness],
         stage: str = "YAP",
     ) -> None:
         cur = self.conn.cursor()
@@ -245,9 +246,11 @@ class FractalMemory:
             )
         self.conn.commit()
 
-    def get_similar_decisions(self, topic: str, limit: int = 3) -> list:
+    def get_similar_decisions(
+        self, topic: str, limit: int = 3
+    ) -> list[tuple[Any, ...]]:
         cur = self.conn.cursor()
-        results = []
+        results: list[tuple[Any, ...]] = []
         for word in topic.lower().split():
             rows = cur.execute(
                 """
@@ -260,7 +263,7 @@ class FractalMemory:
             results.extend(rows)
         return results[:limit]
 
-    def get_top_patterns(self, limit: int = 5) -> list:
+    def get_top_patterns(self, limit: int = 5) -> list[tuple[Any, ...]]:
         return self.conn.cursor().execute(
             """
             SELECT pattern, frequency, avg_score, last_verdict
@@ -269,7 +272,7 @@ class FractalMemory:
             (limit,),
         ).fetchall()
 
-    def get_strong_rules(self, limit: int = 5) -> list:
+    def get_strong_rules(self, limit: int = 5) -> list[tuple[Any, ...]]:
         return self.conn.cursor().execute(
             """
             SELECT rule, confidence, support_count FROM learned_rules
@@ -283,7 +286,7 @@ class FractalMemory:
         row = self.conn.cursor().execute(
             "SELECT relation_strength FROM empathy_map WHERE id=?", (key,)
         ).fetchone()
-        return row[0] if row else 0.5
+        return float(row[0]) if row else 0.5
 
     def save_failure_trace(
         self,
@@ -296,7 +299,6 @@ class FractalMemory:
         ethic_total: float = 0.0,
     ) -> str:
         """Persist a Structured Failure Trace (SFT) for ANLA retry support."""
-        # uuid avoids UNIQUE collisions when two traces are written in the same ms
         trace_id = f"ft_{uuid.uuid4().hex}"
         cur = self.conn.cursor()
         cur.execute(
@@ -319,7 +321,7 @@ class FractalMemory:
         self.conn.commit()
         return trace_id
 
-    def get_recent_failures(self, limit: int = 5) -> list:
+    def get_recent_failures(self, limit: int = 5) -> list[tuple[Any, ...]]:
         """Return most recent failure traces (newest first)."""
         return self.conn.cursor().execute(
             """
