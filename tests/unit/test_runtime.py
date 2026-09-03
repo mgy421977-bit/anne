@@ -18,7 +18,6 @@ class _FakeOpenRouter(OpenRouterProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        # Snapshot the list so later runtime mutations do not alter recorded calls.
         self.calls.append((list(messages), tools))
         return self.responses.pop(0)
 
@@ -79,9 +78,12 @@ def test_openrouter_tool_round_is_followed_by_single_final_synthesis() -> None:
     assert tools_used == ["github_search"]
     assert len(model.calls) == 2
     assert model.calls[1][1] is None
-    tool_message = model.calls[1][0][-1]
+    tool_message = model.calls[1][0][-2]
     assert tool_message["role"] == "tool"
     assert tool_message["tool_call_id"] == "call_1"
+    synthesis_message = model.calls[1][0][-1]
+    assert synthesis_message["role"] == "user"
+    assert "SYNTHESIZE NOW" in synthesis_message["content"]
 
 
 def test_explicit_repository_paths_are_prefetched_in_one_model_turn() -> None:
