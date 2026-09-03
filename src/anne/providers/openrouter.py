@@ -1,8 +1,4 @@
-"""OpenRouter provider for ANNE.
-
-Uses OpenRouter's OpenAI-compatible HTTP API. The default model is
-openrouter/free, which routes requests to currently available free models.
-"""
+"""OpenRouter provider for ANNE with native OpenAI-compatible tool calling."""
 
 from __future__ import annotations
 
@@ -14,26 +10,28 @@ from typing import Any
 
 
 class OpenRouterProvider:
-    """Small dependency-free OpenRouter chat-completions client."""
+    """Small dependency-free OpenRouter client for ANNE."""
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 
-    def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, model: str | None = None, timeout: int = 45) -> None:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
         self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", "openrouter/free")
+        self.timeout = timeout
 
-    def ask(self, prompt: str, system_instruction: str | None = None) -> str:
-        messages: list[dict[str, str]] = []
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
-        messages.append({"role": "user", "content": prompt})
+    def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+            payload["parallel_tool_calls"] = False
+
         request = urllib.request.Request(
             self.ENDPOINT,
             data=json.dumps(payload).encode("utf-8"),
@@ -47,18 +45,21 @@ class OpenRouterProvider:
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                data = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter API error {exc.code}: {body[:500]}") from exc
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:700]}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RuntimeError("OpenRouter request timed out.") from exc
 
-        choices = data.get("choices", [])
-        if not choices:
-            raise RuntimeError("OpenRouter returned no choices")
-        content = choices[0].get("message", {}).get("content")
-        if not content:
-            raise RuntimeError("OpenRouter returned no message content")
-        return str(content)
+    def ask(self, prompt: str, system_instruction: str | None = None) -> str:
+        messages: list[dict[str, Any]] = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
+        data = self.chat(messages)
+        content = data.get("choices", [{}])[0].get("message", {}).get("content")
+        return str(content or "")
