@@ -26,7 +26,7 @@ class MythosEngine:
 
     SYSTEM_PROMPT = (
         "Sen MYTHOS merak motorusun. Görevin bir konuyu derinlemesine "
-        "araştırmak için hipotezler üretmek.\n\n"
+        "araştırmak için hipotezler üret.\n\n"
         "Kurallar:\n"
         "1. Her hipotez somut, test edilebilir bir önerme olmalı\n"
         "2. Olasılık değeri (0.01-0.99) gerçekçi olmalı — hiçbir hipotez 0 olamaz\n"
@@ -66,6 +66,10 @@ class MythosEngine:
     def _generate_via_api(
         self, hyp_id: str, topic: str, prior: float, previous: str
     ) -> Hypothesis:
+        client = self.client
+        if client is None:
+            return self._generate_placeholder(hyp_id, topic, prior)
+
         user_msg = (
             f'Konu: "{topic}"\n'
             f"Önceki güven: {prior:.3f}\n"
@@ -75,13 +79,14 @@ class MythosEngine:
             "veya alternatif öner."
         )
         try:
-            response = self.client.messages.create(
+            response = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=300,
                 system=self.SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_msg}],
             )
-            raw = response.content[0].text.strip()
+            first_block = response.content[0] if response.content else None
+            raw = str(getattr(first_block, "text", "")).strip()
             if "```" in raw:
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
@@ -129,6 +134,10 @@ class MythosEngine:
         return self._test_placeholder(h)
 
     def _test_via_api(self, h: Hypothesis) -> Hypothesis:
+        client = self.client
+        if client is None:
+            return self._test_placeholder(h)
+
         test_prompt = (
             "Sen MYTHOS test motorusun. Bir hipotezi değerlendirip "
             "sonucu JSON döndür.\n\n"
@@ -140,7 +149,7 @@ class MythosEngine:
             "}"
         )
         try:
-            response = self.client.messages.create(
+            response = client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=200,
                 system=test_prompt,
@@ -154,7 +163,8 @@ class MythosEngine:
                     }
                 ],
             )
-            raw = response.content[0].text.strip()
+            first_block = response.content[0] if response.content else None
+            raw = str(getattr(first_block, "text", "")).strip()
             if "```" in raw:
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
