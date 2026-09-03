@@ -19,6 +19,10 @@ class _FakeGitHub:
         self.calls.append(("create_branch", (branch,), {"from_ref": from_ref}))
         return {"branch": branch, "sha": "branch-sha"}
 
+    def get_file(self, path: str, branch: str) -> dict[str, str]:
+        self.calls.append(("get_file", (path,), {"branch": branch}))
+        return {"path": path, "branch": branch, "sha": "resolved-sha", "content": "old"}
+
     def create_file(self, path: str, content: str, branch: str, message: str) -> dict[str, str]:
         self.calls.append(("create_file", (path, content), {"branch": branch, "message": message}))
         return {"path": path, "branch": branch, "commit_sha": "create-sha"}
@@ -60,17 +64,34 @@ def test_plan_requires_feature_branch() -> None:
         SelfImprovementEngine.validate_plan(plan)
 
 
-def test_update_and_delete_require_sha() -> None:
-    for action in ("update", "delete"):
-        plan = SelfImprovementPlan(
-            task="test",
-            branch="anne/improve-test",
-            changes=(ChangeSpec(path="src/test.py", content="x", action=action),),
-            title="test",
-            body="test",
-        )
-        with pytest.raises(ValueError, match="SHA"):
-            SelfImprovementEngine.validate_plan(plan)
+def test_apply_resolves_missing_sha_before_update() -> None:
+    github = _FakeGitHub()
+    engine = SelfImprovementEngine(github)  # type: ignore[arg-type]
+    plan = SelfImprovementPlan(
+        task="Improve SEE",
+        branch="anne/improve-see",
+        changes=(
+            ChangeSpec(
+                path="src/existing.py",
+                content="updated",
+                action="update",
+                message="fix: improve module",
+            ),
+        ),
+        title="feat: improve SEE",
+        body="Improve multi-hypothesis reasoning.",
+    )
+
+    result = engine.apply(plan)
+
+    assert result.commits == ["branch-sha", "update-sha"]
+    assert [call[0] for call in github.calls] == [
+        "create_branch",
+        "get_file",
+        "update_file",
+        "create_pull_request",
+    ]
+    assert github.calls[2][1][2] == "resolved-sha"
 
 
 def test_apply_creates_branch_applies_changes_and_opens_pr() -> None:
