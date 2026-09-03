@@ -1,0 +1,4 @@
+# Runtime dependencies for the Windows Tinker.
+# Install the package itself so its declared provider dependencies are available
+# to both the source tree and the PyInstaller build environment.
+-e ..
