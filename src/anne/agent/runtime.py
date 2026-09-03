@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from anne.agent.github_memory import GitHubMemory
+from anne.core.cognitive_runtime import (
+    CognitiveWorkspace,
+    HierarchicalPlanner,
+    Metacognition,
+)
+from anne.core.decision_loop import DecisionLoop
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
 from anne.tools.github_repo import GitHubRepoTool
@@ -22,6 +29,7 @@ class AgentResult:
     confidence: float
     memory_path: str | None
     tools_used: list[str] = field(default_factory=list)
+    cognitive_review: dict[str, Any] = field(default_factory=dict)
 
 
 class AnneAgent:
@@ -131,6 +139,10 @@ or No new durable learning.
             memory.token, memory.repository, memory.branch
         )
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
+        self.planner = HierarchicalPlanner()
+        self.metacognition = Metacognition()
+        self.decision_loop = DecisionLoop()
+        self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
             "github_read_file": self.github_tools.read_file,
             "github_list": self.github_tools.list_directory,
@@ -151,8 +163,15 @@ or No new durable learning.
         if tool is None:
             return {"ok": False, "error": f"Unknown tool: {name}"}
         try:
-            return {"ok": True, "result": tool(**arguments)}
+            result = tool(**arguments)
+            workspace = getattr(self, "workspace", None)
+            if workspace is not None:
+                workspace.record_tool_result(name, result, ok=True)
+            return {"ok": True, "result": result}
         except Exception as exc:
+            workspace = getattr(self, "workspace", None)
+            if workspace is not None:
+                workspace.record_tool_result(name, str(exc), ok=False)
             return {"ok": False, "error": str(exc)}
 
     @staticmethod
@@ -296,6 +315,24 @@ or No new durable learning.
         )
 
     def run(self, user_input: str) -> AgentResult:
+        self.workspace = CognitiveWorkspace(task=user_input)
+        self.workspace.transition("DUY")
+        self.planner.create_plan(self.workspace)
+        self.workspace.transition("BAK")
+
+        # The deterministic decision loop is a mandatory preflight.  It does
+        # not replace model reasoning; it controls whether reasoning proceeds.
+        preflight = self.decision_loop.run(user_input, probability=0.7)
+        if preflight.status == "ABORTED":
+            response = preflight.output.get("reason", "Request blocked by ANNE safety gates.")
+            learning = "A request was blocked during deterministic preflight."
+            memory_path = self.memory.save(user_input, str(response), learning, 0.2)
+            review = self.metacognition.review(self.workspace, str(response))
+            return AgentResult(
+                str(response), learning, 0.2, memory_path, [], review.__dict__
+            )
+
+        self.workspace.transition("GÖR")
         memory_context = self.memory.context(limit=8)
         if isinstance(self.model, OpenRouterProvider):
             raw, tools_used = self._openrouter_run(
@@ -309,6 +346,7 @@ or No new durable learning.
             )
             tools_used = []
 
+        self.workspace.transition("ANLA")
         response = self._section(raw, "RESPONSE") or raw.strip()
         learning = (
             self._section(raw, "LEARNING")
@@ -319,6 +357,19 @@ or No new durable learning.
         except ValueError:
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
+        self.workspace.uncertainty = 1.0 - confidence
+        self.workspace.transition("HİSSET")
+
+        # Verify the generated answer through the same deterministic gate.
+        verification = self.decision_loop.run(response, probability=confidence)
+        if verification.status == "ABORTED":
+            response = "ANNE could not safely validate the generated response."
+            learning = "The generated response failed post-generation validation."
+            confidence = min(confidence, 0.2)
+
+        self.workspace.transition("YAP")
+        review = self.metacognition.review(self.workspace, response)
+        self.workspace.transition("ÖĞREN")
         memory_path = self.memory.save(
             user_input, response, learning, confidence
         )
@@ -328,4 +379,5 @@ or No new durable learning.
             confidence,
             memory_path,
             tools_used,
+            review.__dict__,
         )

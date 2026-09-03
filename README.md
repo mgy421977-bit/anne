@@ -107,6 +107,15 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 | Standard LLM benchmark superiority | **Not claimed** |
 | Vector memory / multi-agent | Planned |
 
+### v0.2 cognitive runtime
+
+The agent runtime now includes an inspectable `CognitiveWorkspace`, a bounded
+hierarchical planner, and a metacognitive review record. Model generation is
+preceded and followed by the deterministic `DecisionLoop`; the model remains a
+reasoning component rather than the authority that grants tool or action
+permission. This is a step toward a cognitive architecture, not evidence of
+AGI, consciousness, or safe autonomous deployment.
+
 Independent critiques: [`research/reviews/`](research/reviews/).  
 MatrAIx note (external only): [`research/open_questions/matraix_and_hear.md`](research/open_questions/matraix_and_hear.md).
 
