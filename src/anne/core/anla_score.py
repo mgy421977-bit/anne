@@ -10,7 +10,7 @@ gate is not vacuous on the micro-fixture. Not a formal proof.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 DEFAULT_ALPHA = 0.5
 DEFAULT_BETA = 0.3
@@ -49,10 +49,19 @@ def logical_coherence(text: str) -> float:
         return 0.0
     t = text.lower()
 
-    if "never boils" in t and ("boils at" in t or "boils at" in t.replace(" ", "") or "boils" in t):
-        # "boils ... never boils" style
-        if t.count("boil") >= 2 or ("boils at" in t and "never boils" in t):
-            return 0.0
+    if (
+        "never boils" in t
+        and (
+            "boils at" in t
+            or "boils at" in t.replace(" ", "")
+            or "boils" in t
+        )
+        and (
+            t.count("boil") >= 2
+            or ("boils at" in t and "never boils" in t)
+        )
+    ):
+        return 0.0
     if "never boils" in t and "100" in t:
         return 0.0
     if "never melt" in t and "melt" in t:
@@ -83,11 +92,14 @@ def logical_coherence(text: str) -> float:
     return 1.0
 
 
-def trace_awareness(text: str, failures: Sequence | None = None) -> float:
-    if not failures:
-        return 1.0
+def trace_awareness(
+    text: str,
+    failures: Sequence[Sequence[Any]] | None = None,
+) -> float:
     if not tokenize(text):
         return 0.0
+    if not failures:
+        return 1.0
 
     worst = 1.0
     for row in failures:
@@ -104,7 +116,7 @@ def trace_awareness(text: str, failures: Sequence | None = None) -> float:
 
 def compute_anla_score(
     text: str,
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     alpha: float = DEFAULT_ALPHA,
     beta: float = DEFAULT_BETA,
     gamma: float = DEFAULT_GAMMA,
@@ -115,7 +127,6 @@ def compute_anla_score(
     c_log = logical_coherence(text)
     c_trace = trace_awareness(text, failures)
     score = alpha * c_ctx + beta * c_log + gamma * c_trace
-    # Hard contradictions must fail default τ=0.5 (otherwise the gate is vacuous)
     if c_log <= 0.25:
         score = min(score, HARD_CONTRADICTION_CAP)
     return round(max(0.0, min(1.0, float(score))), 3)
@@ -123,7 +134,7 @@ def compute_anla_score(
 
 def passes_anla(
     text: str,
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     tau: float = DEFAULT_TAU,
 ) -> tuple[bool, float]:
     s = compute_anla_score(text, failures)
@@ -132,7 +143,7 @@ def passes_anla(
 
 def select_top_candidates(
     candidates: Iterable[str],
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     top_k: int = 3,
 ) -> list[tuple[str, float]]:
     scored = [(c, compute_anla_score(c, failures)) for c in candidates]

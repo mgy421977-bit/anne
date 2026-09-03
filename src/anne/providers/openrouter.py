@@ -6,7 +6,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 
 class OpenRouterProvider:
@@ -24,8 +24,13 @@ class OpenRouterProvider:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
-        self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", self.DEFAULT_MODEL)
-        self.timeout = timeout
+
+        self.model = model or os.getenv(
+            "ANNE_OPENROUTER_MODEL",
+            self.DEFAULT_MODEL,
+        )
+        env_timeout = os.getenv("ANNE_OPENROUTER_TIMEOUT")
+        self.timeout = int(env_timeout) if env_timeout else timeout
 
     def chat(
         self,
@@ -56,19 +61,39 @@ class OpenRouterProvider:
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+                raw = response.read().decode("utf-8")
+                data = json.loads(raw)
+                if not isinstance(data, dict):
+                    raise RuntimeError("OpenRouter returned a non-object JSON response")
+                return cast(dict[str, Any], data)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:700]}") from exc
+            raise RuntimeError(
+                f"OpenRouter HTTP {exc.code}: {detail[:700]}"
+            ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
+            raise RuntimeError(
+                f"OpenRouter connection error: {exc.reason}"
+            ) from exc
         except TimeoutError as exc:
-            raise RuntimeError("OpenRouter request timed out after 45 seconds.") from exc
+            raise RuntimeError(
+                "OpenRouter request timed out after "
+                f"{self.timeout} seconds."
+            ) from exc
 
-    def ask(self, prompt: str, system_instruction: str | None = None) -> str:
+    def ask(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+    ) -> str:
         messages: list[dict[str, Any]] = []
         if system_instruction:
             messages.append({"role": "system", "content": system_instruction})
         messages.append({"role": "user", "content": prompt})
         data = self.chat(messages)
-        return str(data.get("choices", [{}])[0].get("message", {}).get("content") or "")
+        return str(
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content")
+            or ""
+        )

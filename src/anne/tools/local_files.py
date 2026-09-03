@@ -27,8 +27,15 @@ class LocalFilesTool:
         if not directory.is_dir():
             raise ValueError(f"Not a directory: {path}")
         results: list[str] = []
-        for item in sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))[:200]:
-            results.append(f"{'dir' if item.is_dir() else 'file'}: {item.relative_to(self.root)}")
+        items = sorted(
+            directory.iterdir(),
+            key=lambda p: (not p.is_dir(), p.name.lower()),
+        )[:200]
+        for item in items:
+            results.append(
+                f"{'dir' if item.is_dir() else 'file'}: "
+                f"{item.relative_to(self.root)}"
+            )
         return results
 
     def read(self, path: str) -> str:

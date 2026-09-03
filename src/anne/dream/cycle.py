@@ -34,12 +34,14 @@ class DreamCycle:
             "synthesis": synthesis,
         }
 
-    def _fractal_connections(self, patterns: list) -> list[dict]:
-        connections = []
+    def _fractal_connections(
+        self, patterns: list[tuple[Any, ...]]
+    ) -> list[dict[str, Any]]:
+        connections: list[dict[str, Any]] = []
         for i, p1 in enumerate(patterns):
             for p2 in patterns[i + 1 :]:
-                w1 = set(p1[0].replace("→", "").split())
-                w2 = set(p2[0].replace("→", "").split())
+                w1 = set(str(p1[0]).replace("→", "").split())
+                w2 = set(str(p2[0]).replace("→", "").split())
                 common = w1 & w2
                 if common:
                     connections.append(
@@ -52,25 +54,40 @@ class DreamCycle:
                     )
         return connections[:10]
 
-    def _synthesize(self, patterns: list, rules: list) -> dict[str, float]:
-        s: dict[str, float] = {}
+    def _synthesize(
+        self,
+        patterns: list[tuple[Any, ...]],
+        rules: list[tuple[Any, ...]],
+    ) -> dict[str, float]:
+        synthesis: dict[str, float] = {}
         if not patterns:
-            return s
+            return synthesis
 
-        vc: dict[str, int] = defaultdict(int)
-        for p in patterns:
-            if p[3]:
-                vc[p[3]] += p[1]
-        total = sum(vc.values()) or 1
-        for v, c in vc.items():
-            if c / total > 0.3:
-                s[f"dominant:{v}"] = round(c / total, 3)
+        verdict_counts: dict[str, int] = defaultdict(int)
+        for pattern in patterns:
+            verdict = str(pattern[3]) if len(pattern) > 3 else ""
+            frequency = int(pattern[1]) if len(pattern) > 1 else 0
+            if verdict:
+                verdict_counts[verdict] += frequency
+        total = sum(verdict_counts.values()) or 1
+        for verdict, count in verdict_counts.items():
+            if count / total > 0.3:
+                synthesis[f"dominant:{verdict}"] = round(count / total, 3)
 
-        avgs = [p[2] for p in patterns if p[2] > 0]
+        avgs = [
+            float(pattern[2])
+            for pattern in patterns
+            if len(pattern) > 2 and float(pattern[2]) > 0
+        ]
         if avgs:
-            s[f"quality:{sum(avgs)/len(avgs):.3f}"] = round(sum(avgs) / len(avgs), 3)
+            quality = sum(avgs) / len(avgs)
+            synthesis[f"quality:{quality:.3f}"] = round(quality, 3)
 
         if rules:
-            ac = sum(r[1] for r in rules) / len(rules)
-            s[f"rule_conf:{ac:.3f}"] = round(ac, 3)
-        return s
+            confidences = [float(rule[1]) for rule in rules if len(rule) > 1]
+            if confidences:
+                average_confidence = sum(confidences) / len(confidences)
+                synthesis[f"rule_conf:{average_confidence:.3f}"] = round(
+                    average_confidence, 3
+                )
+        return synthesis

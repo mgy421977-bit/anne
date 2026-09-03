@@ -41,7 +41,9 @@ class GitHubMemory:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"GitHub API error {exc.code}: {body[:300]}") from exc
+            raise RuntimeError(
+                f"GitHub API error {exc.code}: {body[:300]}"
+            ) from exc
 
     def recent(self, limit: int = 8) -> list[dict[str, Any]]:
         """Return the newest memory entries by filename."""
@@ -51,12 +53,22 @@ class GitHubMemory:
             if "404" in str(exc):
                 return []
             raise
-        files = [item for item in items if item.get("type") == "file" and item["name"].endswith(".json")]
+
+        files = [
+            item
+            for item in items
+            if item.get("type") == "file"
+            and item["name"].endswith(".json")
+        ]
         files.sort(key=lambda item: item["name"], reverse=True)
+
         memories: list[dict[str, Any]] = []
         for item in files[:limit]:
-            data = self._request(f"/contents/{item['path']}?ref={self.branch}")
+            data = self._request(
+                f"/contents/{item['path']}?ref={self.branch}"
+            )
             import base64
+
             raw = base64.b64decode(data["content"]).decode("utf-8")
             memories.append(json.loads(raw))
         return memories
@@ -65,16 +77,24 @@ class GitHubMemory:
         memories = self.recent(limit=limit)
         if not memories:
             return "No persistent memories have been recorded yet."
+
         lines = []
         for memory in memories:
             lines.append(
-                f"[{memory.get('timestamp', '')}] USER: {memory.get('user_input', '')}\n"
+                f"[{memory.get('timestamp', '')}] "
+                f"USER: {memory.get('user_input', '')}\n"
                 f"LEARNING: {memory.get('learning', '')}\n"
                 f"RESPONSE: {memory.get('response', '')}"
             )
         return "\n\n---\n\n".join(lines)
 
-    def save(self, user_input: str, response: str, learning: str, confidence: float = 0.5) -> str:
+    def save(
+        self,
+        user_input: str,
+        response: str,
+        learning: str,
+        confidence: float = 0.5,
+    ) -> str:
         """Persist one interaction as a new file; never mutate old memory."""
         timestamp = datetime.now(UTC)
         stamp = timestamp.strftime("%Y%m%dT%H%M%S%fZ")
@@ -89,9 +109,15 @@ class GitHubMemory:
             "confidence": max(0.0, min(1.0, float(confidence))),
         }
         content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-        encoded = __import__("base64").b64encode(content.encode("utf-8")).decode("ascii")
+        encoded = __import__("base64").b64encode(
+            content.encode("utf-8")
+        ).decode("ascii")
         body = json.dumps(
-            {"message": "memory: record ANNE learning", "content": encoded, "branch": self.branch}
+            {
+                "message": "memory: record ANNE learning",
+                "content": encoded,
+                "branch": self.branch,
+            }
         ).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}/contents/{path}",
@@ -110,5 +136,7 @@ class GitHubMemory:
                 result = json.loads(response_obj.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"GitHub memory write failed {exc.code}: {error[:300]}") from exc
+            raise RuntimeError(
+                f"GitHub memory write failed {exc.code}: {error[:300]}"
+            ) from exc
         return str(result.get("content", {}).get("path", path))
