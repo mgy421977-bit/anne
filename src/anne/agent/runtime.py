@@ -1,8 +1,8 @@
-"""ANNE tool-using agent runtime with native OpenRouter tool calling."""
-
+"""ANNE tool-using agent runtime with bounded native tool calling."""
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -24,17 +24,18 @@ class AgentResult:
 
 
 class AnneAgent:
-    """Coordinates model reasoning, safe tools, and persistent GitHub memory."""
+    """Coordinates reasoning models, safe tools, and persistent GitHub memory."""
 
-    MAX_TOOL_ROUNDS = 4
+    MAX_TOOL_ROUNDS = 2
+    MAX_FINAL_RETRIES = 1
 
     SYSTEM = """You are ANNE (Adaptive Neural Nexus Engine), an experimental AI cognitive agent.
 You are not a claim of AGI or consciousness.
 Use DUY -> BAK -> GÖR -> ANLA -> HİSSET -> YAP as a reasoning discipline.
 Treat persistent memory as prior context, not unquestionable truth.
-Do not invent repository facts. When current repository or workspace information is needed, use tools.
-Prefer the minimum number of tool calls needed to obtain evidence. If the user names a specific file,
-read that file directly before exploring other locations.
+Do not invent repository facts. Use tools when evidence is required.
+Use the minimum number of tools necessary. If the user names an exact file path, read that file directly.
+Do not call directory listing or code search when the requested file can be read directly.
 Never expose or request API keys or tokens.
 
 Final response format:
@@ -43,54 +44,14 @@ Final response format:
 <CONFIDENCE>number from 0 to 1</CONFIDENCE>"""
 
     TOOL_SCHEMAS = [
-        {
-            "type": "function",
-            "function": {
-                "name": "github_read_file",
-                "description": "Read one UTF-8 text file from the configured ANNE GitHub repository. Use this first when the user gives an exact file path.",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "github_list",
-                "description": "List a directory in the configured ANNE GitHub repository.",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "github_search",
-                "description": "Search repository code for a query when the exact location is unknown or additional evidence is needed.",
-                "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "local_list",
-                "description": "List files in the local ANNE Windows workspace.",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "local_read",
-                "description": "Read a UTF-8 text file in the local ANNE Windows workspace.",
-                "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
-            },
-        },
+        {"type": "function", "function": {"name": "github_read_file", "description": "Read one UTF-8 text file from the configured ANNE GitHub repository. Use this first for an exact path.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "github_list", "description": "List a repository directory only when the location is unknown.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}}},
+        {"type": "function", "function": {"name": "github_search", "description": "Search repository code only when the exact location or additional evidence is unknown.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "local_list", "description": "List files in the local ANNE Windows workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}}},
+        {"type": "function", "function": {"name": "local_read", "description": "Read a UTF-8 file in the local ANNE Windows workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     ]
 
-    def __init__(
-        self,
-        model: GeminiProvider | OpenRouterProvider,
-        memory: GitHubMemory,
-        workspace: str | Path | None = None,
-    ) -> None:
+    def __init__(self, model: GeminiProvider | OpenRouterProvider, memory: GitHubMemory, workspace: str | Path | None = None) -> None:
         self.model = model
         self.memory = memory
         self.github_tools = GitHubRepoTool(memory.token, memory.repository, memory.branch)
@@ -119,32 +80,34 @@ Final response format:
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
+    @staticmethod
+    def _explicit_repo_path(user_input: str) -> str | None:
+        match = re.search(r"(?:`|\s)(src/anne/[A-Za-z0-9_./-]+)(?:`|\s|$)", user_input)
+        return match.group(1) if match else None
+
     def _openrouter_run(self, user_input: str, memory_context: str) -> tuple[str, list[str]]:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.SYSTEM},
-            {
-                "role": "user",
-                "content": f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}",
-            },
+            {"role": "user", "content": f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}"},
         ]
         tools_used: list[str] = []
+
+        explicit_path = self._explicit_repo_path(user_input)
+        if explicit_path:
+            evidence = self._execute_tool("github_read_file", {"path": explicit_path})
+            tools_used.append("github_read_file")
+            messages.append({"role": "user", "content": f"AUTHORITATIVE REPOSITORY EVIDENCE FOR {explicit_path}:\n{json.dumps(evidence, ensure_ascii=False)}\n\nDo not call directory listing or search. Analyze this evidence directly."})
 
         for _ in range(self.MAX_TOOL_ROUNDS):
             data = self.model.chat(messages, tools=self.TOOL_SCHEMAS)  # type: ignore[attr-defined]
             choices = data.get("choices") or []
             if not choices:
-                return (
-                    "<RESPONSE>OpenRouter returned no choices.</RESPONSE>"
-                    "<LEARNING>No new durable learning.</LEARNING><CONFIDENCE>0.0</CONFIDENCE>",
-                    tools_used,
-                )
+                break
             message = choices[0].get("message") or {}
             tool_calls = message.get("tool_calls") or []
             messages.append(message)
-
             if not tool_calls:
                 return str(message.get("content") or ""), tools_used
-
             for call in tool_calls:
                 fn = call.get("function") or {}
                 name = str(fn.get("name") or "")
@@ -157,44 +120,27 @@ Final response format:
                     arguments = {}
                 result = self._execute_tool(name, arguments)
                 tools_used.append(name)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": str(call.get("id") or ""),
-                        "content": json.dumps(result, ensure_ascii=False),
-                    }
-                )
+                messages.append({"role": "tool", "tool_call_id": str(call.get("id") or ""), "content": json.dumps(result, ensure_ascii=False)})
 
-        # We have enough evidence to ask for synthesis without exposing tools again.
-        synthesis_messages = messages + [
-            {
-                "role": "user",
-                "content": (
-                    "SYNTHESIZE NOW. Do not call any more tools. Use only the evidence already "
-                    "collected above and return the required final response format."
-                ),
-            }
-        ]
-        final_data = self.model.chat(synthesis_messages, tools=None)  # type: ignore[attr-defined]
-        final_message = (final_data.get("choices") or [{}])[0].get("message") or {}
-        raw = str(final_message.get("content") or "")
-        if raw:
-            return raw, tools_used
-        return (
-            "<RESPONSE>The agent collected evidence but could not synthesize a final answer.</RESPONSE>"
-            "<LEARNING>No new durable learning.</LEARNING><CONFIDENCE>0.2</CONFIDENCE>",
-            tools_used,
-        )
+        synthesis = messages + [{"role": "user", "content": "SYNTHESIZE NOW. Do not use tools. Produce the final response using only the evidence already collected. Follow the required <RESPONSE>, <LEARNING>, <CONFIDENCE> format."}]
+        for _ in range(self.MAX_FINAL_RETRIES + 1):
+            try:
+                final_data = self.model.chat(synthesis, tools=None)  # type: ignore[attr-defined]
+            except Exception:
+                continue
+            final_choices = final_data.get("choices") or []
+            if final_choices:
+                raw = str((final_choices[0].get("message") or {}).get("content") or "")
+                if raw:
+                    return raw, tools_used
+        return "<RESPONSE>The agent collected repository evidence but the model did not return a final synthesis.</RESPONSE><LEARNING>No new durable learning.</LEARNING><CONFIDENCE>0.2</CONFIDENCE>", tools_used
 
     def run(self, user_input: str) -> AgentResult:
         memory_context = self.memory.context(limit=8)
         if isinstance(self.model, OpenRouterProvider):
             raw, tools_used = self._openrouter_run(user_input, memory_context)
         else:
-            raw = self.model.ask(
-                f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}",
-                system_instruction=self.SYSTEM,
-            )
+            raw = self.model.ask(f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}", system_instruction=self.SYSTEM)
             tools_used = []
 
         response = self._section(raw, "RESPONSE") or raw.strip()
