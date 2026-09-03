@@ -61,7 +61,6 @@ def logical_coherence(text: str) -> float:
             or ("boils at" in t and "never boils" in t)
         )
     ):
-        # "boils ... never boils" style
         return 0.0
     if "never boils" in t and "100" in t:
         return 0.0
@@ -94,10 +93,10 @@ def logical_coherence(text: str) -> float:
 
 
 def trace_awareness(text: str, failures: Sequence | None = None) -> float:
-    if not failures:
-        return 1.0
     if not tokenize(text):
         return 0.0
+    if not failures:
+        return 1.0
 
     worst = 1.0
     for row in failures:
@@ -125,7 +124,6 @@ def compute_anla_score(
     c_log = logical_coherence(text)
     c_trace = trace_awareness(text, failures)
     score = alpha * c_ctx + beta * c_log + gamma * c_trace
-    # Hard contradictions must fail default τ=0.5
     if c_log <= 0.25:
         score = min(score, HARD_CONTRADICTION_CAP)
     return round(max(0.0, min(1.0, float(score))), 3)
