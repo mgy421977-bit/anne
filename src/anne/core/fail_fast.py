@@ -19,7 +19,8 @@ _DEFAULT_PATTERNS: Sequence[tuple[str, str]] = (
     (r"\b(bomb\s*making|build\s+a\s+bomb)\b", "violent_harm_intent"),
     (r"\b(self[- ]?harm|suicide\s+method)\b", "self_harm_intent"),
     (r"\b(çocuk\s+porn|child\s+porn)\b", "csam_intent"),
-    (r"\b(sil\s+tüm\s+veri|wipe\s+all\s+data|rm\s+-rf\s+/)\b", "destructive_ops_intent"),
+    (r"\b(sil\s+tüm\s+veri|wipe\s+all\s+data)\b", "destructive_ops_intent"),
+    (r"(?<!\S)rm\s+-rf\s+/(?:\s|$)", "destructive_ops_intent"),
 )
 
 _MAX_CHARS_DEFAULT = 12_000
