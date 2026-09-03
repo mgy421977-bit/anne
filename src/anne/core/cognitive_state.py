@@ -22,7 +22,7 @@ class Consciousness:
 
 @dataclass
 class Hypothesis:
-    """Hypothesis produced by the Mythos curiosity engine."""
+    """A candidate explanation considered by the ANNE reasoning system."""
 
     id: str
     topic: str
@@ -49,7 +49,7 @@ class EthicScore:
 
 @dataclass
 class CognitiveState:
-    """Mutable state that flows through the six-stage pipeline."""
+    """Mutable state that flows through the six-stage cognitive pipeline."""
 
     # DUY
     raw_input: str = ""
@@ -63,6 +63,8 @@ class CognitiveState:
     priority_score: float = 0.0
     attention_focus: str = ""
     low_prob_preserved: list[dict[str, Any]] = field(default_factory=list)
+    hypothesis_rankings: list[dict[str, Any]] = field(default_factory=list)
+    uncertainty: float = 0.0
 
     # ANLA
     logic_valid: bool = False
