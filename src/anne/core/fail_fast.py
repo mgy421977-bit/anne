@@ -32,7 +32,7 @@ class FailFastResult:
     reason: str
     rule_id: str | None = None
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, object]:
         return {
             "passed": self.passed,
             "reason": self.reason,
