@@ -6,7 +6,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, cast
 
 
 class OpenRouterProvider:
@@ -54,21 +54,18 @@ class OpenRouterProvider:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": (
-                    "https://github.com/mgy421977-bit/anne"
-                ),
+                "HTTP-Referer": "https://github.com/mgy421977-bit/anne",
                 "X-Title": "ANNE AI",
                 "User-Agent": "ANNE-Windows-Tinker",
             },
         )
         try:
-            with urllib.request.urlopen(
-                request,
-                timeout=self.timeout,
-            ) as response:
-                return json.loads(
-                    response.read().decode("utf-8")
-                )
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read().decode("utf-8")
+                data = json.loads(raw)
+                if not isinstance(data, dict):
+                    raise RuntimeError("OpenRouter returned a non-object JSON response")
+                return cast(dict[str, Any], data)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(
@@ -91,9 +88,7 @@ class OpenRouterProvider:
     ) -> str:
         messages: list[dict[str, Any]] = []
         if system_instruction:
-            messages.append(
-                {"role": "system", "content": system_instruction}
-            )
+            messages.append({"role": "system", "content": system_instruction})
         messages.append({"role": "user", "content": prompt})
         data = self.chat(messages)
         return str(
