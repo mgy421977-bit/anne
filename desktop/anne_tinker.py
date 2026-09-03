@@ -20,6 +20,8 @@ from anne.agent.runtime import AnneAgent
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
 
+DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free"
+
 
 class AnneTinker(tk.Tk):
     def __init__(self) -> None:
@@ -61,11 +63,11 @@ class AnneTinker(tk.Tk):
         self.repository.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
 
         ttk.Label(config, text="Model").grid(row=1, column=2, sticky="w", padx=8, pady=6)
-        self.model = ttk.Entry(config, width=28)
+        self.model = ttk.Entry(config, width=34)
         self.model.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
 
         ttk.Label(config, text="Mode").grid(row=2, column=2, sticky="w", padx=8, pady=6)
-        self.mode = ttk.Label(config, text="Tool Agent + GitHub Memory")
+        self.mode = ttk.Label(config, text="Native Tool Agent + GitHub Memory")
         self.mode.grid(row=2, column=3, sticky="w", padx=8, pady=6)
 
         self.status = ttk.Label(config, text="Ready", anchor="w")
@@ -99,20 +101,21 @@ class AnneTinker(tk.Tk):
         self.api_key.insert(0, os.getenv("OPENROUTER_API_KEY", ""))
         self.github_token.insert(0, os.getenv("GITHUB_TOKEN", ""))
         self.repository.insert(0, os.getenv("ANNE_REPOSITORY", "mgy421977-bit/anne"))
-        self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", "openrouter/free"))
+        self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", DEFAULT_OR_MODEL))
 
     def _update_provider_fields(self) -> None:
         selected = self.provider.get()
+        current = self.model.get().strip()
         if selected == "Gemini":
             self.key_label.configure(text="Gemini API key")
-            if not self.model.get().strip() or self.model.get().strip() == "openrouter/free":
+            if not current or current == DEFAULT_OR_MODEL:
                 self.model.delete(0, "end")
                 self.model.insert(0, os.getenv("ANNE_GEMINI_MODEL", "gemini-3.7-flash"))
         else:
             self.key_label.configure(text="OpenRouter API key")
-            if not self.model.get().strip() or self.model.get().strip() == "gemini-3.7-flash":
+            if not current or current == "gemini-3.7-flash":
                 self.model.delete(0, "end")
-                self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", "openrouter/free"))
+                self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", DEFAULT_OR_MODEL))
 
     def _append(self, speaker: str, text: str) -> None:
         self.chat.configure(state="normal")
