@@ -18,7 +18,8 @@ class _FakeOpenRouter(OpenRouterProvider):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        self.calls.append((messages, tools))
+        # Snapshot the list so later runtime mutations do not alter recorded calls.
+        self.calls.append((list(messages), tools))
         return self.responses.pop(0)
 
 
