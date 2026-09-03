@@ -16,7 +16,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anne.agent.github_memory import GitHubMemory
-from anne.agent.runtime import AnneAgent
+from anne.agent.self_improving_runtime import SelfImprovingAnneAgent
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
 
@@ -67,7 +67,7 @@ class AnneTinker(tk.Tk):
         self.model.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
 
         ttk.Label(config, text="Mode").grid(row=2, column=2, sticky="w", padx=8, pady=6)
-        self.mode = ttk.Label(config, text="Native Tool Agent + GitHub Memory")
+        self.mode = ttk.Label(config, text="Native Tool Agent + Self-Improvement + GitHub Memory")
         self.mode.grid(row=2, column=3, sticky="w", padx=8, pady=6)
 
         self.status = ttk.Label(config, text="Ready", anchor="w")
@@ -92,7 +92,7 @@ class AnneTinker(tk.Tk):
 
         hint = ttk.Label(
             root,
-            text="Ctrl+Enter = Send | ANNE can read GitHub/local files and write durable learning to GitHub memory.",
+            text="Ctrl+Enter = Send | ANNE can read, analyze, create feature branches, modify code, and open PRs; main/master remain protected.",
         )
         hint.pack(anchor="w", pady=(5, 0))
 
@@ -156,7 +156,7 @@ class AnneTinker(tk.Tk):
             else:
                 provider = OpenRouterProvider(api_key=api_key, model=model)
             memory = GitHubMemory(token=github_token, repository=repository)
-            agent = AnneAgent(provider, memory, workspace=ROOT)
+            agent = SelfImprovingAnneAgent(provider, memory, workspace=ROOT)
             result = agent.run(user_input)
             self.result_queue.put(("ok", result))
         except Exception as exc:

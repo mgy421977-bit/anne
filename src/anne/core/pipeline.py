@@ -11,6 +11,7 @@ from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
 from anne.core.fail_fast import FailFastGate, FailFastResult
+from anne.core.hypothesis_engine import HypothesisEngine
 from anne.memory.fractal_memory import FractalMemory
 
 
@@ -25,9 +26,11 @@ class AnnePipeline:
         max_anla_retries: int = MAX_ANLA_RETRIES,
         fail_fast_enabled: bool = True,
         fail_fast_gate: FailFastGate | None = None,
+        hypothesis_engine: HypothesisEngine | None = None,
     ) -> None:
         self.memory = memory
         self.ethic = EthicCore()
+        self.hypothesis_engine = hypothesis_engine or HypothesisEngine()
         self.anla_enabled = anla_enabled
         self.anla_tau = anla_tau
         self.max_anla_retries = max_anla_retries
@@ -73,26 +76,62 @@ class AnnePipeline:
     def gor(
         self, state: CognitiveState, hypotheses: Sequence[Hypothesis]
     ) -> CognitiveState:
+        """SEE/GÖR: inspect the full candidate set and preserve uncertainty."""
         if not hypotheses:
+            state.attention_focus = ""
+            state.priority_score = 0.0
+            state.uncertainty = 0.0
+            state.hypothesis_rankings = []
             return state
-        best = hypotheses[0]
-        state.attention_focus = best.claim
-        state.priority_score = best.probability
-        lowest = hypotheses[-1]
-        if lowest.probability < 0.3:
-            state.low_prob_preserved.append(
-                {
-                    "hypothesis": lowest.claim,
-                    "probability": lowest.probability,
-                    "note": "Low probability – preserved",
-                }
-            )
-        if state.related_memories:
-            scores = [m[1] for m in state.related_memories if m[1]]
-            if scores:
-                state.priority_score = (
-                    state.priority_score * 0.7 + (sum(scores) / len(scores)) * 0.3
+
+        memory_scores = [float(m[1]) for m in state.related_memories if len(m) > 1 and m[1] is not None]
+        ranked = self.hypothesis_engine.rank(hypotheses, memory_scores)
+        state.hypothesis_rankings = [
+            {
+                "rank": view.rank,
+                "hypothesis_id": view.hypothesis.id,
+                "claim": view.hypothesis.claim,
+                "probability": view.hypothesis.probability,
+                "score": view.score,
+                "novelty": view.novelty,
+                "evidence_support": view.evidence_support,
+                "tested": view.hypothesis.tested,
+                "result": view.hypothesis.result,
+            }
+            for view in ranked
+        ]
+
+        winner = ranked[0]
+        state.attention_focus = winner.hypothesis.claim
+        state.priority_score = winner.score
+        state.uncertainty = self.hypothesis_engine.uncertainty(
+            [view.hypothesis.probability for view in ranked]
+        )
+
+        # Preserve every meaningful alternative rather than inspecting only the
+        # last candidate. A dynamic floor keeps rare hypotheses visible while
+        # preventing near-zero noise from overwhelming attention.
+        preserve_floor = max(
+            0.05,
+            min(0.30, winner.hypothesis.probability - 0.20),
+        )
+        for view in ranked[1:]:
+            probability = view.hypothesis.probability
+            score_gap = winner.score - view.score
+            if probability >= preserve_floor or score_gap < 0.25:
+                state.low_prob_preserved.append(
+                    {
+                        "hypothesis": view.hypothesis.claim,
+                        "probability": probability,
+                        "score": view.score,
+                        "rank": view.rank,
+                        "note": "Alternative preserved for uncertainty-aware reasoning",
+                    }
                 )
+
+        state.context_map["hypothesis_count"] = len(ranked)
+        state.context_map["preserve_floor"] = round(preserve_floor, 3)
+        state.context_map["uncertainty"] = state.uncertainty
         return state
 
     def anla(
@@ -210,6 +249,8 @@ class AnnePipeline:
                 "empathy_summary": {
                     cid: v["estimated_impact"] for cid, v in state.empathy_map.items()
                 },
+                "uncertainty": state.uncertainty,
+                "alternatives_preserved": len(state.low_prob_preserved),
             }
         else:
             output = {
@@ -217,33 +258,41 @@ class AnnePipeline:
                 "action": "HALT",
                 "reasoning": score.reasoning if score else "",
                 "low_prob_preserved": state.low_prob_preserved,
-                "note": "Low-probability alternatives preserved.",
+                "uncertainty": state.uncertainty,
+                "note": "Alternatives preserved for uncertainty-aware reasoning.",
             }
 
         state.action = verdict
         state.output = output
         return state
 
-    def run_with_fail_fast(
+    def run_with_hypotheses(
         self,
         raw_input: str,
         consciousnesses: Sequence[Consciousness],
-        hypothesis: Hypothesis,
+        hypotheses: Sequence[Hypothesis],
+        selected_index: int = 0,
+        group_a: Optional[Sequence[Consciousness]] = None,
+        group_b: Optional[Sequence[Consciousness]] = None,
     ) -> tuple[FailFastResult, CognitiveState | None]:
-        """Convenience: fail-fast then full stage chain if allowed.
+        """Run the complete pipeline over a candidate set.
 
-        Returns (fail_fast_result, state_or_None).
-        On fail-fast reject, writes an SFT with stage=FAIL_FAST and state is None.
+        GÖR ranks every candidate, while ANLA validates the selected candidate.
+        The selected index is applied after ranking, so callers can explicitly
+        test an alternative without losing the rest of the candidate set.
         """
+        if not hypotheses:
+            raise ValueError("At least one hypothesis is required")
+
         ff = self.fail_fast(raw_input)
         if not ff.passed:
             self.memory.save_failure_trace(
-                cycle_id=hypothesis.id or "cycle",
+                cycle_id=hypotheses[0].id or "cycle",
                 stage="FAIL_FAST",
                 raw_input=raw_input,
                 reason=ff.reason,
                 meta_tag=ff.rule_id or "fail_fast",
-                hypothesis_id=hypothesis.id,
+                hypothesis_id=hypotheses[0].id,
                 ethic_total=0.0,
             )
             return ff, None
@@ -251,9 +300,23 @@ class AnnePipeline:
         state = self.duy(raw_input, consciousnesses)
         state.context_map["fail_fast"] = ff.as_dict()
         state = self.bak(state)
-        state = self.gor(state, [hypothesis])
-        state = self.anla(state, hypothesis)
+        state = self.gor(state, hypotheses)
+        ranked_ids = [item["hypothesis_id"] for item in state.hypothesis_rankings]
+        safe_index = max(0, min(selected_index, len(ranked_ids) - 1))
+        selected_id = ranked_ids[safe_index]
+        selected = next(h for h in hypotheses if h.id == selected_id)
+        state.context_map["selected_hypothesis_id"] = selected.id
+        state = self.anla(state, selected)
         if state.logic_valid or state.ethic_score is not None:
             state = self.hisset(state)
-        state = self.yap(state, hypothesis)
+        state = self.yap(state, selected, group_a, group_b)
         return ff, state
+
+    def run_with_fail_fast(
+        self,
+        raw_input: str,
+        consciousnesses: Sequence[Consciousness],
+        hypothesis: Hypothesis,
+    ) -> tuple[FailFastResult, CognitiveState | None]:
+        """Backward-compatible single-hypothesis entry point."""
+        return self.run_with_hypotheses(raw_input, consciousnesses, [hypothesis])

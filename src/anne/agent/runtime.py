@@ -42,6 +42,18 @@ If the user names an exact file path, it may already be preloaded as authoritati
 Do not call directory listing or code search when the requested file can be read directly.
 Never expose or request API keys or tokens.
 
+GitHub mutation policy:
+- Write, update, delete, branch creation, and pull-request tools are available only
+  for an implementation task explicitly requested or already approved by the user.
+- Never write to protected branches such as main or master.
+- Create a feature branch before changing repository files.
+- Before updating or deleting an existing file, call github_get_file and use its
+  current SHA. This prevents accidental overwrites of newer changes.
+- Create new files only on the feature branch.
+- After a coherent change set is complete, open a pull request targeting main.
+- Do not merge the pull request; human review remains the final gate.
+- Prefer small, coherent commits and descriptive commit messages.
+
 Final response format:
 <RESPONSE>answer for the user</RESPONSE>
 <LEARNING>
@@ -57,11 +69,32 @@ or No new durable learning.
                 "name": "github_read_file",
                 "description": (
                     "Read one UTF-8 text file from the configured ANNE GitHub "
-                    "repository. Use this first for an exact path."
+                    "repository. Use this for content only."
                 ),
                 "parameters": {
                     "type": "object",
-                    "properties": {"path": {"type": "string"}},
+                    "properties": {
+                        "path": {"type": "string"},
+                        "branch": {"type": "string"},
+                    },
+                    "required": ["path"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_get_file",
+                "description": (
+                    "Fetch an existing repository file with its exact current SHA. "
+                    "Call this before github_update_file or github_delete_file."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "branch": {"type": "string"},
+                    },
                     "required": ["path"],
                 },
             },
@@ -73,7 +106,10 @@ or No new durable learning.
                 "description": "List a repository directory only when the location is unknown.",
                 "parameters": {
                     "type": "object",
-                    "properties": {"path": {"type": "string"}},
+                    "properties": {
+                        "path": {"type": "string"},
+                        "branch": {"type": "string"},
+                    },
                     "required": [],
                 },
             },
@@ -90,6 +126,105 @@ or No new durable learning.
                     "type": "object",
                     "properties": {"query": {"type": "string"}},
                     "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_create_branch",
+                "description": (
+                    "Create a new non-protected feature branch from an existing ref. "
+                    "Use this before repository mutations."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "branch": {"type": "string"},
+                        "from_ref": {"type": "string"},
+                    },
+                    "required": ["branch"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_create_file",
+                "description": (
+                    "Create a new UTF-8 repository file on a non-protected feature branch. "
+                    "Do not target main or master."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                        "branch": {"type": "string"},
+                        "message": {"type": "string"},
+                    },
+                    "required": ["path", "content", "branch", "message"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_update_file",
+                "description": (
+                    "Replace an existing UTF-8 repository file on a non-protected feature branch. "
+                    "The current SHA from github_get_file is required."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                        "sha": {"type": "string"},
+                        "branch": {"type": "string"},
+                        "message": {"type": "string"},
+                    },
+                    "required": ["path", "content", "sha", "branch", "message"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_delete_file",
+                "description": (
+                    "Delete an existing repository file on a non-protected feature branch. "
+                    "The current SHA from github_get_file is required."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "sha": {"type": "string"},
+                        "branch": {"type": "string"},
+                        "message": {"type": "string"},
+                    },
+                    "required": ["path", "sha", "branch", "message"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "github_create_pull_request",
+                "description": (
+                    "Open a pull request from a feature branch into a base branch. "
+                    "Use this after completing and validating a coherent change set."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "head": {"type": "string"},
+                        "base": {"type": "string"},
+                        "body": {"type": "string"},
+                    },
+                    "required": ["title", "head", "base", "body"],
                 },
             },
         },
@@ -133,8 +268,14 @@ or No new durable learning.
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
         self.tools: dict[str, Callable[..., Any]] = {
             "github_read_file": self.github_tools.read_file,
+            "github_get_file": self.github_tools.get_file,
             "github_list": self.github_tools.list_directory,
             "github_search": self.github_tools.search_code,
+            "github_create_branch": self.github_tools.create_branch,
+            "github_create_file": self.github_tools.create_file,
+            "github_update_file": self.github_tools.update_file,
+            "github_delete_file": self.github_tools.delete_file,
+            "github_create_pull_request": self.github_tools.create_pull_request,
             "local_list": self.local_tools.list,
             "local_read": self.local_tools.read,
         }
