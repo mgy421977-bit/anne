@@ -1,14 +1,4 @@
-"""ANNE Windows Tinker — a small Tkinter desktop client.
-
-Run from the repository root after installing dependencies:
-    python desktop/anne_tinker.py
-
-API keys can be entered in the UI or supplied through environment variables:
-    GEMINI_API_KEY
-    GITHUB_TOKEN
-    ANNE_REPOSITORY (default: mgy421977-bit/anne)
-    ANNE_GEMINI_MODEL (default: gemini-3.7-flash)
-"""
+"""ANNE Windows Tinker — a small Tkinter desktop client with tools."""
 
 from __future__ import annotations
 
@@ -17,8 +7,8 @@ import queue
 import sys
 import threading
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, ttk
 from pathlib import Path
+from tkinter import messagebox, scrolledtext, ttk
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -34,8 +24,8 @@ class AnneTinker(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ANNE AI — Windows Tinker")
-        self.geometry("1050x760")
-        self.minsize(860, 620)
+        self.geometry("1120x800")
+        self.minsize(900, 650)
         self.result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self._build_ui()
         self.after(100, self._poll_results)
@@ -47,6 +37,8 @@ class AnneTinker(tk.Tk):
 
         config = ttk.LabelFrame(root, text="Connection")
         config.pack(fill="x", pady=(0, 10))
+        config.columnconfigure(1, weight=1)
+        config.columnconfigure(3, weight=1)
 
         ttk.Label(config, text="Gemini API key").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.gemini_key = ttk.Entry(config, show="*", width=62)
@@ -63,8 +55,6 @@ class AnneTinker(tk.Tk):
         ttk.Label(config, text="Model").grid(row=1, column=2, sticky="w", padx=8, pady=6)
         self.model = ttk.Entry(config, width=28)
         self.model.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
-        config.columnconfigure(1, weight=1)
-        config.columnconfigure(3, weight=1)
 
         self.status = ttk.Label(config, text="Ready", anchor="w")
         self.status.grid(row=2, column=0, columnspan=4, sticky="ew", padx=8, pady=(2, 8))
@@ -86,7 +76,10 @@ class AnneTinker(tk.Tk):
         ttk.Button(button_frame, text="Send", command=self.send).pack(fill="x", pady=(0, 5))
         ttk.Button(button_frame, text="Clear", command=self._clear_input).pack(fill="x")
 
-        hint = ttk.Label(root, text="Ctrl+Enter = Send  |  Memory is written to GitHub after each successful reply.")
+        hint = ttk.Label(
+            root,
+            text="Ctrl+Enter = Send  |  ANNE may read GitHub and the local workspace when needed. Memory is written to GitHub.",
+        )
         hint.pack(anchor="w", pady=(5, 0))
 
     def _load_env_defaults(self) -> None:
@@ -120,7 +113,7 @@ class AnneTinker(tk.Tk):
             return
         self._clear_input()
         self._append("YOU", user_input)
-        self.status.configure(text="ANNE is thinking…")
+        self.status.configure(text="ANNE is thinking and can use tools…")
         threading.Thread(
             target=self._worker,
             args=(user_input, gemini_key, github_token, repository, model),
@@ -131,10 +124,10 @@ class AnneTinker(tk.Tk):
         try:
             provider = GeminiProvider(api_key=gemini_key, model=model)
             memory = GitHubMemory(token=github_token, repository=repository)
-            agent = AnneAgent(provider, memory)
+            agent = AnneAgent(provider, memory, workspace=ROOT)
             result = agent.run(user_input)
             self.result_queue.put(("ok", result))
-        except Exception as exc:  # UI boundary: surface a concise error.
+        except Exception as exc:
             self.result_queue.put(("error", str(exc)))
 
     def _poll_results(self) -> None:
@@ -143,14 +136,17 @@ class AnneTinker(tk.Tk):
                 kind, payload = self.result_queue.get_nowait()
                 if kind == "ok":
                     result = payload
+                    tools = ", ".join(result.tools_used) if result.tools_used else "none"
                     self._append(
                         "ANNE",
-                        f"{result.response}\n\n[Learning saved: {result.memory_path} | confidence={result.confidence:.2f}]",
+                        f"{result.response}\n\n"
+                        f"[Tools: {tools}]\n"
+                        f"[Learning saved: {result.memory_path} | confidence={result.confidence:.2f}]",
                     )
-                    self.status.configure(text="Ready — memory committed to GitHub.")
+                    self.status.configure(text="Ready — response and memory completed.")
                 else:
                     self._append("SYSTEM ERROR", str(payload))
-                    self.status.configure(text="Error — check the keys, network, and GitHub permissions.")
+                    self.status.configure(text="Error — check keys, network, permissions, or tool configuration.")
         except queue.Empty:
             pass
         self.after(100, self._poll_results)
