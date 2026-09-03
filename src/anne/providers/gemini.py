@@ -1,6 +1,7 @@
 """Gemini API provider for ANNE.
 
-Uses Google's current google-genai SDK and Interactions API.
+The Gemini SDK is imported lazily so pipeline-first/offline execution does not
+require the Gemini package at application startup.
 """
 
 from __future__ import annotations
@@ -8,13 +9,19 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from google import genai
-
 
 class GeminiProvider:
     """Thin provider wrapper so ANNE stays model-provider agnostic."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None) -> None:
+        try:
+            from google import genai
+        except ImportError as exc:
+            raise RuntimeError(
+                "Gemini support is not available in this build. "
+                "Install the google-genai package or use Pipeline First without Gemini synthesis."
+            ) from exc
+
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is required")
