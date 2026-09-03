@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from anne.agent.github_memory import GitHubMemory
 from anne.providers.gemini import GeminiProvider
@@ -27,10 +27,7 @@ class AgentResult:
 class AnneAgent:
     """Coordinates reasoning models, safe tools, and persistent GitHub memory."""
 
-    # Keep the OpenRouter call budget deliberately small. Exact repository paths are
-    # prefetched deterministically, so one tool round is normally enough.
     MAX_TOOL_ROUNDS = 1
-    # A failed/empty final response gets one synthesis attempt, not repeated retries.
     MAX_FINAL_RETRIES = 0
 
     SYSTEM = """You are ANNE (Adaptive Neural Nexus Engine), an experimental AI cognitive agent.
@@ -73,9 +70,7 @@ or No new durable learning.
             "type": "function",
             "function": {
                 "name": "github_list",
-                "description": (
-                    "List a repository directory only when the location is unknown."
-                ),
+                "description": "List a repository directory only when the location is unknown.",
                 "parameters": {
                     "type": "object",
                     "properties": {"path": {"type": "string"}},
@@ -114,9 +109,7 @@ or No new durable learning.
             "type": "function",
             "function": {
                 "name": "local_read",
-                "description": (
-                    "Read a UTF-8 file in the local ANNE Windows workspace."
-                ),
+                "description": "Read a UTF-8 file in the local ANNE Windows workspace.",
                 "parameters": {
                     "type": "object",
                     "properties": {"path": {"type": "string"}},
@@ -225,10 +218,10 @@ or No new durable learning.
             user_input, messages, tools_used
         )
 
+        model = cast(OpenRouterProvider, self.model)
+
         for _ in range(self.MAX_TOOL_ROUNDS):
-            data = self.model.chat(
-                messages, tools=self.TOOL_SCHEMAS
-            )  # type: ignore[attr-defined]
+            data = model.chat(messages, tools=self.TOOL_SCHEMAS)
             choices = data.get("choices") or []
             if not choices:
                 break
@@ -264,14 +257,10 @@ or No new durable learning.
                     {
                         "role": "tool",
                         "tool_call_id": str(call.get("id") or ""),
-                        "content": json.dumps(
-                            result, ensure_ascii=False
-                        ),
+                        "content": json.dumps(result, ensure_ascii=False),
                     }
                 )
 
-        # Exactly one tool-free synthesis request after the tool round or
-        # an empty content response. This keeps the API call budget bounded.
         synthesis = messages + [
             {
                 "role": "user",
@@ -285,17 +274,13 @@ or No new durable learning.
         ]
         for _ in range(self.MAX_FINAL_RETRIES + 1):
             try:
-                final_data = self.model.chat(
-                    synthesis, tools=None
-                )  # type: ignore[attr-defined]
+                final_data = model.chat(synthesis, tools=None)
             except Exception:
                 continue
             final_choices = final_data.get("choices") or []
             if final_choices:
                 raw = str(
-                    (final_choices[0].get("message") or {}).get(
-                        "content"
-                    )
+                    (final_choices[0].get("message") or {}).get("content")
                     or ""
                 ).strip()
                 if raw:
@@ -330,9 +315,7 @@ or No new durable learning.
             or "No new durable learning."
         )
         try:
-            confidence = float(
-                self._section(raw, "CONFIDENCE")
-            )
+            confidence = float(self._section(raw, "CONFIDENCE"))
         except ValueError:
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
