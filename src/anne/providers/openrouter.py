@@ -13,6 +13,7 @@ class OpenRouterProvider:
     """Small dependency-free OpenRouter client for ANNE."""
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+    DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
     def __init__(
         self,
@@ -23,11 +24,7 @@ class OpenRouterProvider:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
-        # gpt-oss-20b is currently listed by OpenRouter as a free model with
-        # native function calling/tool use and structured outputs.
-        self.model = model or os.getenv(
-            "ANNE_OPENROUTER_MODEL", "openai/gpt-oss-20b:free"
-        )
+        self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", self.DEFAULT_MODEL)
         self.timeout = timeout
 
     def chat(
@@ -62,10 +59,6 @@ class OpenRouterProvider:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            if exc.code == 429:
-                raise RuntimeError(
-                    f"OpenRouter rate limit reached. Please retry shortly. {detail[:500]}"
-                ) from exc
             raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:700]}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
