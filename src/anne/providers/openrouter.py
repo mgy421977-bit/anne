@@ -14,25 +14,23 @@ class OpenRouterProvider:
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
     DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
-    DEFAULT_TIMEOUT = 45
 
     def __init__(
         self,
         api_key: str | None = None,
         model: str | None = None,
-        timeout: int | None = None,
+        timeout: int = 45,
     ) -> None:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
-        self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", self.DEFAULT_MODEL)
+
+        self.model = model or os.getenv(
+            "ANNE_OPENROUTER_MODEL",
+            self.DEFAULT_MODEL,
+        )
         env_timeout = os.getenv("ANNE_OPENROUTER_TIMEOUT")
-        if timeout is None and env_timeout:
-            try:
-                timeout = int(env_timeout)
-            except ValueError:
-                timeout = self.DEFAULT_TIMEOUT
-        self.timeout = max(5, timeout if timeout is not None else self.DEFAULT_TIMEOUT)
+        self.timeout = int(env_timeout) if env_timeout else timeout
 
     def chat(
         self,
@@ -56,28 +54,51 @@ class OpenRouterProvider:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/mgy421977-bit/anne",
+                "HTTP-Referer": (
+                    "https://github.com/mgy421977-bit/anne"
+                ),
                 "X-Title": "ANNE AI",
                 "User-Agent": "ANNE-Windows-Tinker",
             },
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                request,
+                timeout=self.timeout,
+            ) as response:
+                return json.loads(
+                    response.read().decode("utf-8")
+                )
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:700]}") from exc
+            raise RuntimeError(
+                f"OpenRouter HTTP {exc.code}: {detail[:700]}"
+            ) from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
+            raise RuntimeError(
+                f"OpenRouter connection error: {exc.reason}"
+            ) from exc
         except TimeoutError as exc:
             raise RuntimeError(
-                f"OpenRouter request timed out after {self.timeout} seconds."
+                "OpenRouter request timed out after "
+                f"{self.timeout} seconds."
             ) from exc
 
-    def ask(self, prompt: str, system_instruction: str | None = None) -> str:
+    def ask(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+    ) -> str:
         messages: list[dict[str, Any]] = []
         if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
+            messages.append(
+                {"role": "system", "content": system_instruction}
+            )
         messages.append({"role": "user", "content": prompt})
         data = self.chat(messages)
-        return str(data.get("choices", [{}])[0].get("message", {}).get("content") or "")
+        return str(
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content")
+            or ""
+        )
