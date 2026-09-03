@@ -31,7 +31,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Tinker desktop\anne_tinker.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --name ANNE_Tinker desktop\anne_tinker.py
 
       - name: Verify executable exists
         shell: pwsh
