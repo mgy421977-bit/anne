@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "timestamp": "2026-09-03T19:43:47.827755+00:00",
+  "agent": "ANNE",
+  "user_input": "kendini tanıt",
+  "response": "Merhaba! Ben ANNE (Adaptive Neural Nexus Engine) — deneysel bir bilişsel AI ajanıyım.\n\n**Ne yaparım:**\n- **Bilişsel Pipeline**: DUY → BAK → GÖR → ANLA → HİSSET → YAP aşamalarıyla girdileri işlerim\n- **Bellek**: SQLite tabanlı FractalMemory ile kararları, kuralları, başarısızlıkları ve empati izlerini saklarım\n- **Değerlendirme**: Mantık (logic_score) + Etik (ethic_score) skorlaması, fail-fast erken çıkış kapısı\n- **Hipotez Motoru**: Yeni eklenen HypothesisEngine ile kendi hipotezlerimi bellek ve şablonlardan deterministik üretirim\n\n**Ne *değilim*:**\n- AGI veya bilinçli bir varlık değilim\n- Harici API'ye bağımlı değilim (çekirdek pipeline tamamen yerel ve deterministik)\n- Kendi mimarimi çalışma anında sorgulayan bir meta-bilişsel katmanım yok\n\n**Şu anki odak:** Harici hipotez kaynağına ihtiyaç duymadan, kendi içinde çoklu hipotez üretebilen bir motoru (HypothesisEngine) entegre etmek.\n\nSize nasıl yardımcı olabilirim?",
+  "learning": "No new durable learning.",
+  "confidence": 1.0
+}
