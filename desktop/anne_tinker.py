@@ -20,7 +20,7 @@ from anne.agent.runtime import AnneAgent
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
 
-DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b-20260604:free"
+DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
 
 class AnneTinker(tk.Tk):
@@ -113,7 +113,7 @@ class AnneTinker(tk.Tk):
                 self.model.insert(0, os.getenv("ANNE_GEMINI_MODEL", "gemini-3.7-flash"))
         else:
             self.key_label.configure(text="OpenRouter API key")
-            if not current or current == "gemini-3.7-flash":
+            if not current or current in ("gemini-3.7-flash", "openai/gpt-oss-20b:free"):
                 self.model.delete(0, "end")
                 self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", DEFAULT_OR_MODEL))
 
@@ -149,15 +149,7 @@ class AnneTinker(tk.Tk):
             daemon=True,
         ).start()
 
-    def _worker(
-        self,
-        user_input: str,
-        api_key: str,
-        github_token: str,
-        repository: str,
-        model: str,
-        provider_name: str,
-    ) -> None:
+    def _worker(self, user_input: str, api_key: str, github_token: str, repository: str, model: str, provider_name: str) -> None:
         try:
             if provider_name == "Gemini":
                 provider = GeminiProvider(api_key=api_key, model=model)
