@@ -8,11 +8,7 @@ from typing import Any, Optional
 
 @dataclass
 class Consciousness:
-    """A unit of consciousness tracked by the system.
-
-    Axiom: weight is always 1.0 (equality). exists is always True
-    unless explicitly marked otherwise by higher-level logic.
-    """
+    """A unit of consciousness tracked by the system."""
 
     id: str
     weight: float = 1.0
@@ -22,7 +18,7 @@ class Consciousness:
 
 @dataclass
 class Hypothesis:
-    """Hypothesis produced by the Mythos curiosity engine."""
+    """A candidate explanation considered by the ANNE reasoning system."""
 
     id: str
     topic: str
@@ -32,7 +28,7 @@ class Hypothesis:
     tested: bool = False
     result: Optional[str] = None
     confidence_delta: float = 0.0
-    source: str = "placeholder"  # "api" | "placeholder"
+    source: str = "placeholder"
 
 
 @dataclass
@@ -43,35 +39,26 @@ class EthicScore:
     equality: float
     harm: float
     total: float
-    verdict: str  # ONAYLA | REDDET | AYRI_ÇÖZÜM
+    verdict: str
     reasoning: str = ""
 
 
 @dataclass
 class CognitiveState:
-    """Mutable state that flows through the six-stage pipeline."""
+    """Mutable state that flows through the six-stage cognitive pipeline."""
 
-    # DUY
     raw_input: str = ""
-    input_type: str = ""  # explore | conflict | query | risk
-
-    # BAK
+    input_type: str = ""
     context_map: dict[str, Any] = field(default_factory=dict)
     related_memories: list[Any] = field(default_factory=list)
-
-    # GÖR
     priority_score: float = 0.0
     attention_focus: str = ""
     low_prob_preserved: list[dict[str, Any]] = field(default_factory=list)
-
-    # ANLA
+    hypothesis_rankings: list[dict[str, Any]] = field(default_factory=list)
+    uncertainty: float = 0.0
     logic_valid: bool = False
     ethic_score: Optional[EthicScore] = None
-
-    # HİSSET
     empathy_map: dict[str, Any] = field(default_factory=dict)
     affected_consciousnesses: list[Consciousness] = field(default_factory=list)
-
-    # YAP
     action: str = ""
     output: dict[str, Any] = field(default_factory=dict)

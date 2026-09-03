@@ -6,6 +6,7 @@ on:
     paths:
       - 'desktop/anne_tinker.py'
       - 'desktop/build_exe_windows.bat'
+      - 'desktop/requirements.txt'
       - 'src/anne/**'
       - 'pyproject.toml'
       - '.github/workflows/windows-build.yml'
@@ -26,11 +27,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r desktop/requirements.txt
-          python -m pip install pyinstaller
+          python -m pip install "google-genai>=1.0.0" pyinstaller
+          python -c "from google import genai; print('google-genai import OK:', genai.__file__)"
 
       - name: Build EXE
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Tinker desktop\anne_tinker.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google --collect-all google.genai --hidden-import google --hidden-import google.genai --name ANNE_Tinker desktop\anne_tinker.py
 
       - name: Verify executable exists
         shell: pwsh
@@ -38,9 +40,39 @@ jobs:
           if (-not (Test-Path 'dist\ANNE_Tinker.exe')) { throw 'ANNE_Tinker.exe was not created.' }
           Get-Item 'dist\ANNE_Tinker.exe' | Format-List FullName,Length
 
+      - name: Build full source package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package\ANNE_Tinker_Full | Out-Null
+          Copy-Item -Recurse -Force desktop package\ANNE_Tinker_Full\desktop
+          Copy-Item -Recurse -Force src package\ANNE_Tinker_Full\src
+          if (Test-Path 'tests') { Copy-Item -Recurse -Force tests package\ANNE_Tinker_Full\tests }
+          if (Test-Path 'docs') { Copy-Item -Recurse -Force docs package\ANNE_Tinker_Full\docs }
+          if (Test-Path 'examples') { Copy-Item -Recurse -Force examples package\ANNE_Tinker_Full\examples }
+          foreach ($file in @('README.md','LICENSE','pyproject.toml','requirements.txt')) {
+            if (Test-Path $file) { Copy-Item -Force $file package\ANNE_Tinker_Full\$file }
+          }
+          Copy-Item -Force dist\ANNE_Tinker.exe package\ANNE_Tinker_Full\ANNE_Tinker.exe
+          @"
+          ANNE Tinker Full Package
+          Branch: $env:GITHUB_REF_NAME
+          Commit: $env:GITHUB_SHA
+          Build: Windows Tinker Build
+          Includes the source tree needed to inspect and run the Tinker application.
+          Configuration is supplied through environment variables at runtime; no secrets are included.
+          "@ | Set-Content package\ANNE_Tinker_Full\BUILD_INFO.txt -Encoding UTF8
+          Compress-Archive -Path package\ANNE_Tinker_Full -DestinationPath ANNE_Tinker_Full_20260904.zip -Force
+
       - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
         with:
           name: ANNE_Tinker_Windows
           path: dist/ANNE_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload full package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Tinker_Full_Package
+          path: ANNE_Tinker_Full_20260904.zip
           if-no-files-found: error
