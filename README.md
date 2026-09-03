@@ -36,6 +36,39 @@ Latest micro-ablation summary: [`benchmarks/results/RESULTS.md`](benchmarks/resu
 
 ---
 
+## Windows Agent
+
+The repository includes a Tkinter desktop client under `desktop/anne_tinker.py`.
+
+The Windows Tinker can use either:
+
+- **OpenRouter Free** via `openrouter/free` (recommended for the free prototype)
+- **Gemini** via the Gemini API
+
+The reasoning provider is separated from ANNE's orchestration layer. ANNE owns the cognitive loop, tool execution and persistent memory; the model provider supplies language reasoning.
+
+OpenRouter's `openrouter/free` router selects from currently available free models and filters for capabilities such as tool calling and structured output. Free-plan limits are subject to change; check OpenRouter's current pricing page before relying on the free tier for sustained workloads.
+
+### Windows environment variables
+
+```text
+OPENROUTER_API_KEY
+GITHUB_TOKEN
+ANNE_REPOSITORY=mgy421977-bit/anne
+ANNE_OPENROUTER_MODEL=openrouter/free
+ANNE_PROVIDER=OpenRouter Free
+```
+
+Gemini remains available with:
+
+```text
+GEMINI_API_KEY
+ANNE_GEMINI_MODEL=gemini-3.7-flash
+ANNE_PROVIDER=Gemini
+```
+
+---
+
 ## Core Architecture
 
 | # | Code (TR) | EN alias | Function |
@@ -67,6 +100,10 @@ total = (goodness × 0.4) + (equality × 0.4) − (harm × 0.2)
 | Fractal episodic memory (SQLite) + SFT | Implemented |
 | ANLA heuristic + contradiction cap | Implemented |
 | Ablation micro-results (n=30) | **Committed** — see `benchmarks/results/` |
+| Gemini model provider | Implemented |
+| OpenRouter free model provider | Implemented |
+| GitHub read tools | Implemented |
+| GitHub persistent learning memory | Implemented |
 | Standard LLM benchmark superiority | **Not claimed** |
 | Vector memory / multi-agent | Planned |
 
