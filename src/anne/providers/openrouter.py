@@ -14,14 +14,27 @@ class OpenRouterProvider:
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 
-    def __init__(self, api_key: str | None = None, model: str | None = None, timeout: int = 45) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout: int = 45,
+    ) -> None:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
-        self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", "openrouter/free")
+        # gpt-oss-20b is currently listed by OpenRouter as a free model with
+        # native function calling/tool use and structured outputs.
+        self.model = model or os.getenv(
+            "ANNE_OPENROUTER_MODEL", "openai/gpt-oss-20b:free"
+        )
         self.timeout = timeout
 
-    def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -49,11 +62,15 @@ class OpenRouterProvider:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 429:
+                raise RuntimeError(
+                    f"OpenRouter rate limit reached. Please retry shortly. {detail[:500]}"
+                ) from exc
             raise RuntimeError(f"OpenRouter HTTP {exc.code}: {detail[:700]}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise RuntimeError("OpenRouter request timed out.") from exc
+            raise RuntimeError("OpenRouter request timed out after 45 seconds.") from exc
 
     def ask(self, prompt: str, system_instruction: str | None = None) -> str:
         messages: list[dict[str, Any]] = []
@@ -61,5 +78,4 @@ class OpenRouterProvider:
             messages.append({"role": "system", "content": system_instruction})
         messages.append({"role": "user", "content": prompt})
         data = self.chat(messages)
-        content = data.get("choices", [{}])[0].get("message", {}).get("content")
-        return str(content or "")
+        return str(data.get("choices", [{}])[0].get("message", {}).get("content") or "")
