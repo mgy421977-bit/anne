@@ -14,18 +14,25 @@ class OpenRouterProvider:
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
     DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    DEFAULT_TIMEOUT = 45
 
     def __init__(
         self,
         api_key: str | None = None,
         model: str | None = None,
-        timeout: int = 45,
+        timeout: int | None = None,
     ) -> None:
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTER_API_KEY is required")
         self.model = model or os.getenv("ANNE_OPENROUTER_MODEL", self.DEFAULT_MODEL)
-        self.timeout = timeout
+        env_timeout = os.getenv("ANNE_OPENROUTER_TIMEOUT")
+        if timeout is None and env_timeout:
+            try:
+                timeout = int(env_timeout)
+            except ValueError:
+                timeout = self.DEFAULT_TIMEOUT
+        self.timeout = max(5, timeout if timeout is not None else self.DEFAULT_TIMEOUT)
 
     def chat(
         self,
@@ -63,7 +70,9 @@ class OpenRouterProvider:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"OpenRouter connection error: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise RuntimeError("OpenRouter request timed out after 45 seconds.") from exc
+            raise RuntimeError(
+                f"OpenRouter request timed out after {self.timeout} seconds."
+            ) from exc
 
     def ask(self, prompt: str, system_instruction: str | None = None) -> str:
         messages: list[dict[str, Any]] = []
