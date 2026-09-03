@@ -10,7 +10,7 @@ gate is not vacuous on the micro-fixture. Not a formal proof.
 from __future__ import annotations
 
 import re
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 DEFAULT_ALPHA = 0.5
 DEFAULT_BETA = 0.3
@@ -92,7 +92,10 @@ def logical_coherence(text: str) -> float:
     return 1.0
 
 
-def trace_awareness(text: str, failures: Sequence | None = None) -> float:
+def trace_awareness(
+    text: str,
+    failures: Sequence[Sequence[Any]] | None = None,
+) -> float:
     if not tokenize(text):
         return 0.0
     if not failures:
@@ -113,7 +116,7 @@ def trace_awareness(text: str, failures: Sequence | None = None) -> float:
 
 def compute_anla_score(
     text: str,
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     alpha: float = DEFAULT_ALPHA,
     beta: float = DEFAULT_BETA,
     gamma: float = DEFAULT_GAMMA,
@@ -131,7 +134,7 @@ def compute_anla_score(
 
 def passes_anla(
     text: str,
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     tau: float = DEFAULT_TAU,
 ) -> tuple[bool, float]:
     s = compute_anla_score(text, failures)
@@ -140,7 +143,7 @@ def passes_anla(
 
 def select_top_candidates(
     candidates: Iterable[str],
-    failures: Sequence | None = None,
+    failures: Sequence[Sequence[Any]] | None = None,
     top_k: int = 3,
 ) -> list[tuple[str, float]]:
     scored = [(c, compute_anla_score(c, failures)) for c in candidates]
