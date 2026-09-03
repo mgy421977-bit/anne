@@ -5,7 +5,7 @@ Order: optional FailFast → DUY → BAK → GÖR → ANLA → HİSSET → YAP.
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
@@ -146,7 +146,7 @@ class AnnePipeline:
         return state
 
     def hisset(self, state: CognitiveState) -> CognitiveState:
-        empathy_map = {}
+        empathy_map: dict[str, Any] = {}
         for c in state.affected_consciousnesses:
             others = [o for o in state.affected_consciousnesses if o.id != c.id]
             rels = [self.memory.get_empathy_strength(c.id, o.id) for o in others]
@@ -183,7 +183,7 @@ class AnnePipeline:
         verdict = score.verdict if score else "UNKNOWN"
 
         if verdict == "AYRI_ÇÖZÜM" and group_a and group_b:
-            output = {
+            output: dict[str, Any] = {
                 "verdict": verdict,
                 "action": "SEPARATE_SOLUTIONS",
                 "group_a": {
