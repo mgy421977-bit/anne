@@ -23,10 +23,7 @@ class GeminiProvider:
 
     def ask(self, prompt: str, system_instruction: str | None = None) -> str:
         """Run a single Gemini interaction and return plain text."""
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "input": prompt,
-        }
+        kwargs: dict[str, Any] = {"model": self.model, "input": prompt}
         if system_instruction:
             kwargs["system_instruction"] = system_instruction
         interaction = self.client.interactions.create(**kwargs)
@@ -42,8 +39,11 @@ class GeminiProvider:
             "Be precise about uncertainty. Do not claim a capability is implemented unless "
             "the supplied context establishes it. Return a useful, concise answer."
         )
-        prompt = f"""USER INPUT:\n{user_input}\n\nANNE MEMORY CONTEXT:\n{memory_context}\n\n"
-            "Think through the request using the ANNE stages DUY, BAK, GOR, ANLA, HİSSET, YAP. "
+        prompt = (
+            f"USER INPUT:\n{user_input}\n\n"
+            f"ANNE MEMORY CONTEXT:\n{memory_context}\n\n"
+            "Think through the request using the ANNE stages DUY, BAK, GÖR, ANLA, HİSSET, YAP. "
             "Produce the best next response for the user, clearly separating facts, inference, "
-            "and uncertainty."""
+            "and uncertainty."
+        )
         return self.ask(prompt, system_instruction=system)
