@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "timestamp": "2026-09-03T17:14:41.366116+00:00",
+  "agent": "ANNE",
+  "user_input": "ANNE, DUR.\n\nMevcut agent araçlarının neden kod yazmaya yetmediğini tespit et.\n\nŞunları listele:\n1. Elindeki tüm tool'lar\n2. Hangileri READ\n3. Hangileri WRITE\n4. GitHub'a dosya yazmak için hangi tool eksik\n5. Local dosya oluşturmak/değiştirmek için hangi tool eksik\n6. Test çalıştırmak için hangi tool eksik\n7. Commit/branch/PR için hangi tool eksik\n\nHENÜZ KOD DEĞİŞTİRME.\n\nSon satır:\nTOOL CAPABILITY AUDIT TAMAMLANDI.",
+  "response": "The agent collected repository evidence but the model did not return a final synthesis.",
+  "learning": "No new durable learning.",
+  "confidence": 0.2
+}
