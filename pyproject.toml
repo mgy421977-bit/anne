@@ -9,7 +9,7 @@ description = "ANNE – Adaptive Neural Nexus Engine: Six-stage cognitive archit
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
-    {name = "Mustafa Gökhan Yılmaz", email = "mgy421977@gmail.com"}
+    {name = "Mustafa Gökhan Yılmaz", email = "mustafa.gokhan.yilmaz@example.com"}
 ]
 requires-python = ">=3.12"
 classifiers = [
@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "anthropic>=0.40.0",
     "google-genai>=1.0.0",
+    "pypdf>=5.0.0",
     "typing-extensions>=4.12.0",
 ]
 
