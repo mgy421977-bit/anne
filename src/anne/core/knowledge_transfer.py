@@ -1,8 +1,8 @@
-"""Fast teacher-to-ANNE knowledge transfer without model-weight copying.
+"""Hybrid teacher-to-ANNE knowledge transfer.
 
-Transfer packets are compact structured lessons. ANNE stores them as durable
-knowledge and can immediately use them in its cognitive loop. This is
-knowledge/pattern transfer, not a claim of copying a teacher model's weights.
+ANNE keeps its own cognitive state while an optional teacher model can provide
+answers and examples. Transfer stores facts, reasoning patterns, rules and
+response-style patterns; model weights are never copied.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ class TransferPacket:
     rules: list[str] = field(default_factory=list)
     examples: list[str] = field(default_factory=list)
     cautions: list[str] = field(default_factory=list)
+    response_style: list[str] = field(default_factory=list)
     source: str = "teacher"
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
@@ -51,6 +52,7 @@ class KnowledgeTransferEngine:
             rules=values("rules"),
             examples=values("examples"),
             cautions=values("cautions"),
+            response_style=values("response_style"),
             source=str(data.get("source", "teacher")).strip() or "teacher",
         )
 
@@ -96,8 +98,16 @@ class KnowledgeTransferEngine:
                 break
         return packets
 
-    def context(self, limit: int = 24) -> str:
+    def context(self, limit: int = 24, topic: str = "") -> str:
         packets = self.load(limit)
+        if topic.strip():
+            terms = set(topic.lower().split())
+            packets = sorted(
+                packets,
+                key=lambda packet: len(terms.intersection(set(packet.topic.lower().split()))) +
+                len(terms.intersection(set(" ".join(packet.facts + packet.patterns + packet.rules).lower().split()))),
+                reverse=True,
+            )
         lines: list[str] = []
         for packet in packets:
             lines.append(f"[{packet.topic}] source={packet.source}")
@@ -106,6 +116,7 @@ class KnowledgeTransferEngine:
                 ("PATTERN", packet.patterns),
                 ("RULE", packet.rules),
                 ("EXAMPLE", packet.examples),
+                ("STYLE", packet.response_style),
                 ("CAUTION", packet.cautions),
             ):
                 lines.extend(f"{label}: {item}" for item in items)
@@ -119,6 +130,7 @@ class KnowledgeTransferEngine:
             "patterns": sum(len(packet.patterns) for packet in packets),
             "rules": sum(len(packet.rules) for packet in packets),
             "examples": sum(len(packet.examples) for packet in packets),
+            "style_patterns": sum(len(packet.response_style) for packet in packets),
             "cautions": sum(len(packet.cautions) for packet in packets),
         }
 
