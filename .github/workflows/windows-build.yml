@@ -6,6 +6,7 @@ on:
     paths:
       - 'desktop/anne_tinker.py'
       - 'desktop/build_exe_windows.bat'
+      - 'desktop/requirements.txt'
       - 'src/anne/**'
       - 'pyproject.toml'
       - '.github/workflows/windows-build.yml'
@@ -26,11 +27,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r desktop/requirements.txt
-          python -m pip install pyinstaller
 
       - name: Build EXE
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Tinker desktop\anne_tinker.py
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --name ANNE_Tinker desktop\anne_tinker.py
 
       - name: Verify executable exists
         shell: pwsh
