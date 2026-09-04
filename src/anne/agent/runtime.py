@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """ANNE tool-using agent runtime with bounded native tool calling."""
 
 from __future__ import annotations
@@ -72,7 +73,11 @@ omit only when no semantic extraction is useful.
     def __init__(self, model: Any, memory: GitHubMemory, workspace: str | Path | None = None) -> None:
         self.model = model
         self.memory = memory
-        self.github_tools = GitHubRepoTool(memory.token, memory.repository, memory.branch)
+        self.github_tools = (
+            GitHubRepoTool(memory.token, memory.repository, memory.branch)
+            if getattr(memory, "token", "")
+            else None
+        )
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
         self.planner = HierarchicalPlanner()
         self.metacognition = Metacognition()
@@ -80,18 +85,27 @@ omit only when no semantic extraction is useful.
         self.ontology = Ontology()
         self.tool_policy = ToolPolicy()
         self.collaborator = MultiAgentCoordinator(
-            roles=[AgentRole("researcher", "collect relevant evidence"), AgentRole("critic", "challenge assumptions"), AgentRole("planner", "propose a verifiable next step")],
+            roles=[
+                AgentRole("researcher", "collect relevant evidence"),
+                AgentRole("critic", "challenge assumptions"),
+                AgentRole("planner", "propose a verifiable next step"),
+            ],
             max_rounds=2,
         )
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
-            "github_read_file": self.github_tools.read_file,
-            "github_list": self.github_tools.list_directory,
-            "github_search": self.github_tools.search_code,
             "local_list": self.local_tools.list,
             "local_read": self.local_tools.read,
         }
+        if self.github_tools is not None:
+            self.tools.update(
+                {
+                    "github_read_file": self.github_tools.read_file,
+                    "github_list": self.github_tools.list_directory,
+                    "github_search": self.github_tools.search_code,
+                }
+            )
 
     def collaborate(self, task: str, workers: dict[str, Worker]) -> CollaborationResult:
         return self.collaborator.collaborate(task, workers)
@@ -132,7 +146,14 @@ omit only when no semantic extraction is useful.
                 seen.add(path)
         return paths[:8]
 
-    def _prefetch_explicit_repo_evidence(self, user_input: str, messages: list[dict[str, Any]], tools_used: list[str]) -> None:
+    def _prefetch_explicit_repo_evidence(
+        self,
+        user_input: str,
+        messages: list[dict[str, Any]],
+        tools_used: list[str],
+    ) -> None:
+        if self.github_tools is None:
+            return
         paths = self._explicit_repo_paths(user_input)
         if not paths:
             return
@@ -141,17 +162,46 @@ omit only when no semantic extraction is useful.
             result = self._execute_tool("github_read_file", {"path": path})
             tools_used.append("github_read_file")
             evidence.append({"path": path, "evidence": result})
-        messages.append({"role": "user", "content": "AUTHORITATIVE REPOSITORY EVIDENCE (prefetched directly by ANNE):\n" + json.dumps(evidence, ensure_ascii=False) + "\n\nAnalyze this evidence directly. Do not call github_read_file again for these paths."})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "AUTHORITATIVE REPOSITORY EVIDENCE (prefetched directly by ANNE):\n"
+                    + json.dumps(evidence, ensure_ascii=False)
+                    + "\n\nAnalyze this evidence directly. Do not call github_read_file again for these paths."
+                ),
+            }
+        )
 
-    def _tool_run(self, user_input: str, memory_context: str, external_context: str = "") -> tuple[str, list[str]]:
+    def _tool_run(
+        self,
+        user_input: str,
+        memory_context: str,
+        external_context: str = "",
+    ) -> tuple[str, list[str]]:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.SYSTEM},
-            {"role": "user", "content": f"PERSISTENT MEMORY:\n{memory_context}\n\nRESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\nCURRENT USER INPUT:\n{user_input}"},
+            {
+                "role": "user",
+                "content": (
+                    f"PERSISTENT MEMORY:\n{memory_context}\n\n"
+                    f"RESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\n"
+                    f"CURRENT USER INPUT:\n{user_input}"
+                ),
+            },
         ]
         tools_used: list[str] = []
         self._prefetch_explicit_repo_evidence(user_input, messages, tools_used)
+        tool_schemas = self.TOOL_SCHEMAS
+        if self.github_tools is None:
+            tool_schemas = [
+                schema
+                for schema in self.TOOL_SCHEMAS
+                if schema["function"]["name"]
+                not in {"github_read_file", "github_list", "github_search"}
+            ]
         for _ in range(self.MAX_TOOL_ROUNDS):
-            data = self.model.chat(messages, tools=self.TOOL_SCHEMAS)
+            data = self.model.chat(messages, tools=tool_schemas)
             choices = data.get("choices") or []
             if not choices:
                 break
@@ -168,51 +218,92 @@ omit only when no semantic extraction is useful.
                 name = str(fn.get("name") or "")
                 raw_args = fn.get("arguments", "{}")
                 try:
-                    arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                    arguments = (
+                        json.loads(raw_args)
+                        if isinstance(raw_args, str)
+                        else raw_args
+                    )
                 except json.JSONDecodeError:
                     arguments = {}
                 if not isinstance(arguments, dict):
                     arguments = {}
                 result = self._execute_tool(name, arguments)
                 tools_used.append(name)
-                messages.append({"role": "tool", "tool_call_id": str(call.get("id") or ""), "content": json.dumps(result, ensure_ascii=False)})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": str(call.get("id") or ""),
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }
+                )
 
-        synthesis = messages + [{"role": "user", "content": "SYNTHESIZE NOW. Do not use tools. Produce the final response using only the evidence already collected. Follow the required <RESPONSE>, <LEARNING>, <SEMANTIC_FRAME>, <CONFIDENCE> format."}]
+        synthesis = messages + [
+            {
+                "role": "user",
+                "content": (
+                    "SYNTHESIZE NOW. Do not use tools. Produce the final response using only "
+                    "the evidence already collected. Follow the required <RESPONSE>, "
+                    "<LEARNING>, <SEMANTIC_FRAME>, <CONFIDENCE> format."
+                ),
+            }
+        ]
         try:
             final_data = self.model.chat(synthesis, tools=None)
             final_choices = final_data.get("choices") or []
             if final_choices:
-                raw = str((final_choices[0].get("message") or {}).get("content") or "").strip()
+                raw = str(
+                    (final_choices[0].get("message") or {}).get("content") or ""
+                ).strip()
                 if raw:
                     return raw, tools_used
         except Exception:
             pass
-        return "<RESPONSE>The model did not return a final synthesis after the available evidence was collected.</RESPONSE><LEARNING>No new durable learning.</LEARNING><CONFIDENCE>0.2</CONFIDENCE>", tools_used
+        return (
+            "<RESPONSE>The model did not return a final synthesis after the available "
+            "evidence was collected.</RESPONSE><LEARNING>No new durable learning."
+            "</LEARNING><CONFIDENCE>0.2</CONFIDENCE>",
+            tools_used,
+        )
 
     def run(self, user_input: str, external_context: str = "") -> AgentResult:
         self.workspace = CognitiveWorkspace(task=user_input)
         self.workspace.semantic_frame = frame_from_text(user_input)
         self.workspace.observations.append("User input grounded as traceable evidence")
         if external_context:
-            self.workspace.observations.append("Research file context attached to the reasoning request")
+            self.workspace.observations.append(
+                "Research file context attached to the reasoning request"
+            )
         self.workspace.transition("DUY")
         self.planner.create_plan(self.workspace)
         self.workspace.transition("BAK")
 
         preflight = self.decision_loop.run(user_input, probability=0.7)
         if preflight.status == "ABORTED":
-            response = preflight.output.get("reason", "Request blocked by ANNE safety gates.")
+            response = preflight.output.get(
+                "reason", "Request blocked by ANNE safety gates."
+            )
             learning = "A request was blocked during deterministic preflight."
-            memory_path = self.memory.save(redact_sensitive(user_input), redact_sensitive(str(response)), redact_sensitive(learning), 0.2)
+            memory_path = self.memory.save(
+                redact_sensitive(user_input),
+                redact_sensitive(str(response)),
+                redact_sensitive(learning),
+                0.2,
+            )
             review = self.metacognition.review(self.workspace, str(response))
             return AgentResult(str(response), learning, 0.2, memory_path, [], review.__dict__)
 
         self.workspace.transition("GÖR")
         memory_context = self.memory.context(limit=8)
         if getattr(self.model, "supports_tools", False):
-            raw, tools_used = self._tool_run(user_input, memory_context, external_context)
+            raw, tools_used = self._tool_run(
+                user_input, memory_context, external_context
+            )
         else:
-            prompt = f"PERSISTENT MEMORY:\n{memory_context}\n\nRESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\nCURRENT USER INPUT:\n{user_input}"
+            prompt = (
+                f"PERSISTENT MEMORY:\n{memory_context}\n\n"
+                f"RESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\n"
+                f"CURRENT USER INPUT:\n{user_input}"
+            )
             raw = self.model.ask(prompt, system_instruction=self.SYSTEM)
             tools_used = []
 
@@ -223,9 +314,13 @@ omit only when no semantic extraction is useful.
             try:
                 self.workspace.semantic_frame = parse_structured_frame(structured)
                 issues = self.ontology.validate(self.workspace.semantic_frame)
-                self.workspace.observations.append(f"Model semantic frame parsed; ontology issues={len(issues)}")
+                self.workspace.observations.append(
+                    f"Model semantic frame parsed; ontology issues={len(issues)}"
+                )
             except (ValueError, TypeError):
-                self.workspace.observations.append("Model semantic frame invalid; text grounding retained")
+                self.workspace.observations.append(
+                    "Model semantic frame invalid; text grounding retained"
+                )
         learning = self._section(raw, "LEARNING") or "No new durable learning."
         try:
             confidence = float(self._section(raw, "CONFIDENCE"))
@@ -248,7 +343,22 @@ omit only when no semantic extraction is useful.
             evidence=self.workspace.semantic_frame.evidence,
             assumptions=self.workspace.active_hypotheses,
         ).__dict__
-        review_data = {**review.__dict__, "reasoning_audit": self.workspace.reasoning_audit}
+        review_data = {
+            **review.__dict__,
+            "reasoning_audit": self.workspace.reasoning_audit,
+        }
         self.workspace.transition("ÖĞREN")
-        memory_path = self.memory.save(redact_sensitive(user_input), redact_sensitive(response), redact_sensitive(learning), confidence)
-        return AgentResult(response, learning, confidence, memory_path, tools_used, review_data)
+        memory_path = self.memory.save(
+            redact_sensitive(user_input),
+            redact_sensitive(response),
+            redact_sensitive(learning),
+            confidence,
+        )
+        return AgentResult(
+            response,
+            learning,
+            confidence,
+            memory_path,
+            tools_used,
+            review_data,
+        )
