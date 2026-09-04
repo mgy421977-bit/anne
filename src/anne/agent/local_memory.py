@@ -71,10 +71,7 @@ class LocalMemory:
             "confidence": max(0.0, min(1.0, float(confidence))),
             "storage": "local",
         }
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return str(path)
 
     def remember(self, user_input: str) -> None:
