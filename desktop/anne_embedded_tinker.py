@@ -7,7 +7,6 @@ provider backed by llama.cpp. It does not start Ollama or another local server.
 from __future__ import annotations
 
 import sys
-import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
