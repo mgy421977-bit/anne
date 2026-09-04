@@ -16,7 +16,7 @@ from anne.providers.openrouter import OpenRouterProvider
 
 
 class OllamaProvider(OpenRouterProvider):
-    """Local Ollama client with the same tool-capable interface as OpenRouter."""
+    """Local Ollama client with graceful fallback for models without tool support."""
 
     DEFAULT_BASE_URL = "http://127.0.0.1:11434"
     DEFAULT_MODEL = "gemma3:4b"
@@ -28,16 +28,13 @@ class OllamaProvider(OpenRouterProvider):
         model: str | None = None,
         timeout: int = 180,
     ) -> None:
-        raw_base = (
-            base_url
-            or os.getenv("ANNE_OLLAMA_BASE_URL")
-            or self.DEFAULT_BASE_URL
-        )
+        raw_base = base_url or os.getenv("ANNE_OLLAMA_BASE_URL") or self.DEFAULT_BASE_URL
         self.base_url = raw_base.rstrip("/")
         self.model = model or os.getenv("ANNE_OLLAMA_MODEL") or self.DEFAULT_MODEL
         env_timeout = os.getenv("ANNE_OLLAMA_TIMEOUT")
         self.timeout = int(env_timeout) if env_timeout else timeout
         self.api_key = "ollama-local"
+        self.supports_tools = True
 
     @property
     def endpoint(self) -> str:
@@ -51,9 +48,26 @@ class OllamaProvider(OpenRouterProvider):
         )
         try:
             with urllib.request.urlopen(request, timeout=min(self.timeout, 10)) as response:
-                return bool(200 <= response.status < 300)
+                return bool(200 <= int(response.status) < 300)
         except (urllib.error.URLError, TimeoutError, OSError):
             return False
+
+    def _request_chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "ANNE-Windows-Tinker",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            raw = response.read().decode("utf-8")
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise RuntimeError("Ollama returned a non-object JSON response")
+            return cast(dict[str, Any], data)
 
     def chat(
         self,
@@ -66,36 +80,33 @@ class OllamaProvider(OpenRouterProvider):
             "temperature": 0.2,
             "stream": False,
         }
-        if tools:
+        if tools and self.supports_tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
             payload["parallel_tool_calls"] = False
-
-        request = urllib.request.Request(
-            self.endpoint,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "ANNE-Windows-Tinker",
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                raw = response.read().decode("utf-8")
-                data = json.loads(raw)
-                if not isinstance(data, dict):
-                    raise RuntimeError("Ollama returned a non-object JSON response")
-                return cast(dict[str, Any], data)
+            return self._request_chat(payload)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
+            lower = detail.lower()
+            if tools and self.supports_tools and "does not support tools" in lower:
+                self.supports_tools = False
+                fallback = dict(payload)
+                fallback.pop("tools", None)
+                fallback.pop("tool_choice", None)
+                fallback.pop("parallel_tool_calls", None)
+                try:
+                    return self._request_chat(fallback)
+                except urllib.error.HTTPError as fallback_exc:
+                    fallback_detail = fallback_exc.read().decode("utf-8", errors="replace")
+                    raise RuntimeError(
+                        f"Ollama HTTP {fallback_exc.code}: {fallback_detail[:700]}"
+                    ) from fallback_exc
             raise RuntimeError(f"Ollama HTTP {exc.code}: {detail[:700]}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Ollama connection error: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise RuntimeError(
-                f"Ollama request timed out after {self.timeout} seconds."
-            ) from exc
+            raise RuntimeError(f"Ollama request timed out after {self.timeout} seconds.") from exc
 
     def ask(self, prompt: str, system_instruction: str | None = None) -> str:
         messages: list[dict[str, Any]] = []
