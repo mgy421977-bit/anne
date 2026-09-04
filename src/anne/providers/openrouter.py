@@ -14,6 +14,7 @@ class OpenRouterProvider:
 
     ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
     DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+    supports_tools = True
 
     def __init__(
         self,
