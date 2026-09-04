@@ -54,13 +54,17 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Native_Cognitive_Tinker desktop\anne_native_cognitive_tinker.py
 
+      - name: Build Hybrid Teacher Student EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Hybrid_Tinker desktop\anne_hybrid_tinker.py
+
       - name: Verify executables exist
         shell: pwsh
         run: |
-          foreach ($name in @('ANNE_Tinker.exe','ANNE_Embedded_Tinker.exe','ANNE_Cognitive_Tinker.exe','ANNE_Native_Cognitive_Tinker.exe')) {
+          foreach ($name in @('ANNE_Tinker.exe','ANNE_Embedded_Tinker.exe','ANNE_Cognitive_Tinker.exe','ANNE_Native_Cognitive_Tinker.exe','ANNE_Hybrid_Tinker.exe')) {
             if (-not (Test-Path "dist\$name")) { throw "$name was not created." }
           }
-          Get-Item 'dist\ANNE_Tinker.exe', 'dist\ANNE_Embedded_Tinker.exe', 'dist\ANNE_Cognitive_Tinker.exe', 'dist\ANNE_Native_Cognitive_Tinker.exe' | Format-List FullName,Length
+          Get-Item 'dist\ANNE_Tinker.exe', 'dist\ANNE_Embedded_Tinker.exe', 'dist\ANNE_Cognitive_Tinker.exe', 'dist\ANNE_Native_Cognitive_Tinker.exe', 'dist\ANNE_Hybrid_Tinker.exe' | Format-List FullName,Length
 
       - name: Upload standard Windows EXE
         uses: actions/upload-artifact@v4
@@ -88,6 +92,13 @@ jobs:
         with:
           name: ANNE_Native_Cognitive_Tinker_Windows
           path: dist/ANNE_Native_Cognitive_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload Hybrid Teacher Student Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Hybrid_Tinker_Windows
+          path: dist/ANNE_Hybrid_Tinker.exe
           if-no-files-found: error
 
       - name: Package full ANNE source
