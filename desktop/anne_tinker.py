@@ -318,10 +318,16 @@ class AnneTinker(tk.Tk):
                 repository or "mgy421977-bit/anne",
                 branch="main",
             ) if github_token else LocalMemory()
+            if hasattr(memory, "remember"):
+                memory.remember(user_input)
             agent = AnneAgent(provider, memory, workspace=str(Path.home() / ".anne" / "workspace"))
             context = external_context
             result = agent.run(user_input, memory_context=memory.load_context(), external_context=context)
-            memory.save_learning(result.learning)
+            memory.save_learning(
+                result.learning,
+                response=result.response,
+                confidence=result.confidence,
+            )
             self.result_queue.put(("response", result))
         except Exception as exc:
             self.result_queue.put(("error", str(exc)))
