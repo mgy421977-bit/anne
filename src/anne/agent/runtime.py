@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
@@ -260,10 +261,8 @@ omit only when no semantic extraction is useful.
             confidence = 0.5
         frame = frame_from_text(response)
         if semantic_text:
-            try:
+            with contextlib.suppress(Exception):
                 frame = parse_structured_frame(semantic_text)
-            except Exception:
-                pass
         audit = self.semantic_validator.validate(frame)
         review = self.metacognition.review(response, confidence)
         review["semantic_valid"] = audit.valid
