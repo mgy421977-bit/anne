@@ -55,8 +55,10 @@ class AnneTinker(tk.Tk):
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=12)
         root.pack(fill="both", expand=True)
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(2, weight=1)
         config = ttk.LabelFrame(root, text="Connection")
-        config.pack(fill="x", pady=(0, 10))
+        config.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         for column in (1, 3):
             config.columnconfigure(column, weight=1)
         ttk.Label(config, text="Provider").grid(row=0, column=0, sticky="w", padx=8, pady=6)
@@ -92,7 +94,7 @@ class AnneTinker(tk.Tk):
         self.status = ttk.Label(config, text="Ready", anchor="w")
         self.status.grid(row=4, column=0, columnspan=4, sticky="ew", padx=8, pady=(2, 8))
         research = ttk.LabelFrame(root, text="Research Files")
-        research.pack(fill="x", pady=(0, 10))
+        research.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         research.columnconfigure(0, weight=1)
         self.file_list = tk.Listbox(research, height=5, selectmode="extended")
         self.file_list.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=8, pady=8)
@@ -106,23 +108,26 @@ class AnneTinker(tk.Tk):
             text="TXT / MD / code / JSON / CSV / PDF / DOCX  •  files are extracted locally and sent as research context",
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 8))
         chat_frame = ttk.LabelFrame(root, text="ANNE")
-        chat_frame.pack(fill="both", expand=True, pady=(0, 10))
+        chat_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
+        chat_frame.columnconfigure(0, weight=1)
+        chat_frame.rowconfigure(0, weight=1)
         self.chat = scrolledtext.ScrolledText(chat_frame, wrap="word", font=("Segoe UI", 10))
-        self.chat.pack(fill="both", expand=True, padx=8, pady=8)
+        self.chat.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         self.chat.configure(state="disabled")
         input_frame = ttk.Frame(root)
-        input_frame.pack(fill="x")
+        input_frame.grid(row=3, column=0, sticky="ew")
+        input_frame.columnconfigure(0, weight=1)
         self.input_box = tk.Text(input_frame, height=4, wrap="word", font=("Segoe UI", 10))
-        self.input_box.pack(side="left", fill="both", expand=True)
+        self.input_box.grid(row=0, column=0, sticky="ew")
         self.input_box.bind("<Control-Return>", lambda _event: self.send())
         button_frame = ttk.Frame(input_frame)
-        button_frame.pack(side="right", fill="y", padx=(8, 0))
+        button_frame.grid(row=0, column=1, sticky="ns", padx=(8, 0))
         ttk.Button(button_frame, text="Send", command=self.send).pack(fill="x", pady=(0, 5))
         ttk.Button(button_frame, text="Clear", command=self._clear_input).pack(fill="x")
         ttk.Label(
             root,
             text="Ctrl+Enter = Send | Attach an ATHENA/research file and ask ANNE to test assumptions, contradictions, uncertainty and missed alternatives.",
-        ).pack(anchor="w", pady=(5, 0))
+        ).grid(row=4, column=0, sticky="w", pady=(5, 0))
 
     def _load_env_defaults(self) -> None:
         self.provider.set(os.getenv("ANNE_PROVIDER", "Ollama Local"))
