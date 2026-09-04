@@ -218,13 +218,64 @@ omit only when no semantic extraction is useful.
                 name = str(fn.get("name") or "")
                 raw_args = fn.get("arguments", "{}")
                 try:
-                    arguments = (
-                        json.loads(raw_args)
-                        if isinstance(raw_args, str)
-                        else raw_args
-                    )
+                    arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                 except json.JSONDecodeError:
                     arguments = {}
                 if not isinstance(arguments, dict):
                     arguments = {}
-                result = self._execute_tool(name, arguments)
+                self._execute_tool(name, arguments)
+                tools_used.append(name)
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "Tool calls executed. Continue with the final structured response.",
+                }
+            )
+        data = self.model.chat(messages, tools=[])
+        choices = data.get("choices") or []
+        if choices:
+            message = choices[0].get("message") or {}
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content, tools_used
+        return "<RESPONSE>No response generated.</RESPONSE>\n<LEARNING>No new durable learning.</LEARNING>\n<CONFIDENCE>0</CONFIDENCE>", tools_used
+
+    def run(
+        self,
+        user_input: str,
+        memory_context: str,
+        external_context: str = "",
+    ) -> AgentResult:
+        plan = self.planner.plan(user_input)
+        self.workspace = CognitiveWorkspace(task=user_input, plan=plan.steps)
+        self.workspace.record_input(user_input)
+        response_text, tools_used = self._tool_run(user_input, memory_context, external_context)
+        response = self._section(response_text, "RESPONSE") or response_text
+        learning = self._section(response_text, "LEARNING") or "No new durable learning."
+        semantic_text = self._section(response_text, "SEMANTIC_FRAME")
+        confidence_text = self._section(response_text, "CONFIDENCE")
+        try:
+            confidence = max(0.0, min(1.0, float(confidence_text)))
+        except ValueError:
+            confidence = 0.5
+        frame = frame_from_text(response)
+        if semantic_text:
+            try:
+                frame = parse_structured_frame(semantic_text)
+            except Exception:
+                pass
+        audit = self.semantic_validator.validate(frame)
+        review = self.metacognition.review(response, confidence)
+        review["semantic_valid"] = audit.valid
+        if self.workspace is not None:
+            self.workspace.record_reasoning(response, confidence)
+            self.workspace.record_decision(review)
+            self.workspace.finalize()
+        return AgentResult(
+            response=redact_sensitive(response),
+            learning=redact_sensitive(learning),
+            confidence=confidence,
+            memory_path=self.memory.path,
+            tools_used=tools_used,
+            cognitive_review=review,
+        )
