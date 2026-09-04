@@ -122,7 +122,7 @@ class AnneNativeTinker(tk.Tk):
     def refresh_status(self) -> None:
         stats = self.transfer.stats()
         self.status_label.configure(
-            text=f"Native AI aktif • {stats['packets']} transfer paketi • {stats['facts']} bilgi • {stats['patterns']} örüntü • {stats['rules']} kural • LLM gerektirmez"
+            text=f"Native AI aktif • {stats['packets']} transfer paketi • {stats['facts']} bilgi • {stats['patterns']} örüntü • {stats['rules']} kural"
         )
 
     def show_stats(self) -> None:
@@ -171,7 +171,10 @@ class AnneNativeTinker(tk.Tk):
             messagebox.showerror("Aktarım Hatası", str(exc))
 
     def add_files(self) -> None:
-        paths = filedialog.askopenfilenames(title="Araştırma dosyaları", filetypes=[("Text/JSON", "*.txt *.md *.json *.csv *.py *.js *.ts"), ("All", "*.*")])
+        paths = filedialog.askopenfilenames(
+            title="Araştırma dosyaları",
+            filetypes=[("Text/JSON", "*.txt *.md *.json *.csv *.py *.js *.ts"), ("All", "*.*")],
+        )
         for raw in paths:
             path = Path(raw)
             if path not in self.attachments:
@@ -223,6 +226,7 @@ class AnneNativeTinker(tk.Tk):
         concepts = ", ".join(state.concepts[:8]) or "genel konu"
         best = max(state.hypotheses, key=lambda item: item.score, default=None)
         learned = [item for item in state.evidence if item.startswith("LEARNED:")]
+        learned_text = " | ".join(learned[:3])
         if any(word in intent for word in ("merhaba", "selam", "hey")):
             return f"Merhaba. Ben ANNE. Girdiyi kendi bilişsel döngümden geçirdim. Algıladığım kavramlar: {concepts}. Bu döngüde {len(learned)} öğrenilmiş bilgi parçasını eşleştirdim. Güvenim {state.confidence:.2f}."
         if "kendini" in intent and ("özetle" in intent or "anlat" in intent or "tanıt" in intent):
@@ -243,6 +247,8 @@ class AnneNativeTinker(tk.Tk):
         evidence = f" {len(state.evidence)} kanıt kaydı bulundu."
         hypothesis = best.text if best else "Mevcut bağlamı sürdürmek"
         learned_line = f" {len(learned)} öğrenilmiş kayıt hipotezi etkiledi." if learned else " Öğrenilmiş eşleşme bulunmadı."
+        if learned_text:
+            learned_line += f" Öne çıkan öğrenilmiş içerik: {learned_text}"
         return (
             f"Girdiyi kendi bilişsel motorumla değerlendirdim. Kavramlar: {concepts}.{evidence}{learned_line} "
             f"En güçlü yorumum: {hypothesis}. Güvenim {state.confidence:.2f}; belirsizliğim {state.uncertainty:.2f}. "
@@ -255,7 +261,9 @@ class AnneNativeTinker(tk.Tk):
             knowledge = self.transfer.context()
             evidence = [context] if context else []
             self.engine.cycle(text, memory=memory.load_context(), evidence=evidence, knowledge=knowledge)
-            state = self.engine.snapshot()
+            state = self.engine.state
+            if state is None:
+                raise RuntimeError("ANNE cognitive state was not created")
             for phase in PHASES[:6]:
                 self.result_queue.put(("phase", phase))
             web_used = False
@@ -271,13 +279,14 @@ class AnneNativeTinker(tk.Tk):
                         self.result_queue.put(("web", results))
                 except Exception as exc:
                     self.result_queue.put(("status", f"Web araştırması başarısız: {exc}"))
-            # Re-run the decision stage after web evidence so YAP can change its action.
             if web_used:
                 self.engine.gor()
                 self.engine.anla(text)
                 self.engine.hisset()
                 self.engine.yap()
                 state = self.engine.state
+                if state is None:
+                    raise RuntimeError("ANNE state disappeared during web re-evaluation")
             response = self._native_response(state, knowledge, web_used)
             if self.learning.get():
                 packet = {
@@ -291,8 +300,9 @@ class AnneNativeTinker(tk.Tk):
                 }
                 self.transfer.ingest([packet])
                 self.engine.ogren(response, "Cycle result stored; relevant learned knowledge is fed back into future cycles.")
+            learned_count = len([e for e in state.evidence if e.startswith("LEARNED:")])
             self.result_queue.put(("response", response))
-            self.result_queue.put(("status", f"ANNE döngüyü tamamladı • güven {state.confidence:.2f} • {len([e for e in state.evidence if e.startswith('LEARNED:')])} öğrenilmiş eşleşme • ÖĞREN güncellendi"))
+            self.result_queue.put(("status", f"ANNE döngüyü tamamladı • güven {state.confidence:.2f} • {learned_count} öğrenilmiş eşleşme • ÖĞREN güncellendi"))
             self.result_queue.put(("refresh", None))
         except Exception as exc:
             self.result_queue.put(("error", str(exc)))
