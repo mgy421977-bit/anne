@@ -116,6 +116,16 @@ reasoning component rather than the authority that grants tool or action
 permission. This is a step toward a cognitive architecture, not evidence of
 AGI, consciousness, or safe autonomous deployment.
 
+### v0.3 neuro-semantic core
+
+The runtime now exposes semantic frames, traceable evidence and provenance,
+an explicit belief store with conservative contradiction marking, plan-step
+verification, and a neuro-symbolic reasoning audit. These components preserve
+uncertainty instead of converting model output directly into fact. The current
+grounding extractor is intentionally conservative and deterministic; it is a
+stable contract for a future neural parser, not a claim of human-level semantic
+understanding.
+
 Independent critiques: [`research/reviews/`](research/reviews/).  
 MatrAIx note (external only): [`research/open_questions/matraix_and_hear.md`](research/open_questions/matraix_and_hear.md).
 

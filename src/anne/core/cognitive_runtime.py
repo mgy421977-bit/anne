@@ -32,6 +32,8 @@ class CognitiveWorkspace:
     active_hypotheses: list[str] = field(default_factory=list)
     observations: list[str] = field(default_factory=list)
     tool_results: list[dict[str, Any]] = field(default_factory=list)
+    semantic_frame: Any = None
+    reasoning_audit: dict[str, Any] = field(default_factory=dict)
     uncertainty: float = 1.0
     phase: str = "DUY"
     created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())

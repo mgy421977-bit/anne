@@ -16,8 +16,10 @@ from anne.core.cognitive_runtime import (
     Metacognition,
 )
 from anne.core.decision_loop import DecisionLoop
+from anne.neuro_symbolic.audit import NeuroSymbolicValidator
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
+from anne.semantics.core import frame_from_text
 from anne.tools.github_repo import GitHubRepoTool
 from anne.tools.local_files import LocalFilesTool
 
@@ -141,6 +143,7 @@ or No new durable learning.
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
         self.planner = HierarchicalPlanner()
         self.metacognition = Metacognition()
+        self.semantic_validator = NeuroSymbolicValidator()
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
@@ -316,6 +319,8 @@ or No new durable learning.
 
     def run(self, user_input: str) -> AgentResult:
         self.workspace = CognitiveWorkspace(task=user_input)
+        self.workspace.semantic_frame = frame_from_text(user_input)
+        self.workspace.observations.append("User input grounded as traceable evidence")
         self.workspace.transition("DUY")
         self.planner.create_plan(self.workspace)
         self.workspace.transition("BAK")
@@ -369,6 +374,12 @@ or No new durable learning.
 
         self.workspace.transition("YAP")
         review = self.metacognition.review(self.workspace, response)
+        self.workspace.reasoning_audit = self.semantic_validator.audit(
+            conclusion=response,
+            evidence=self.workspace.semantic_frame.evidence,
+            assumptions=self.workspace.active_hypotheses,
+        ).__dict__
+        review_data = {**review.__dict__, "reasoning_audit": self.workspace.reasoning_audit}
         self.workspace.transition("ÖĞREN")
         memory_path = self.memory.save(
             user_input, response, learning, confidence
@@ -379,5 +390,5 @@ or No new durable learning.
             confidence,
             memory_path,
             tools_used,
-            review.__dict__,
+            review_data,
         )
