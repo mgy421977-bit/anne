@@ -126,6 +126,14 @@ grounding extractor is intentionally conservative and deterministic; it is a
 stable contract for a future neural parser, not a claim of human-level semantic
 understanding.
 
+### v0.4 reliability and safety core
+
+The agent now applies an allowlisted tool policy, redacts common credentials
+before durable memory writes, supports evidence-weighted belief revision and
+causal hypotheses, and can block plan steps whose preconditions are missing
+while creating a repair step. These are conservative controls and do not make
+the system safe for unsupervised high-stakes deployment.
+
 Independent critiques: [`research/reviews/`](research/reviews/).  
 MatrAIx note (external only): [`research/open_questions/matraix_and_hear.md`](research/open_questions/matraix_and_hear.md).
 

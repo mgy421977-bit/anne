@@ -19,6 +19,7 @@ from anne.core.decision_loop import DecisionLoop
 from anne.neuro_symbolic.audit import NeuroSymbolicValidator
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
+from anne.safety.policy import ToolPolicy, redact_sensitive
 from anne.semantics.core import frame_from_text
 from anne.semantics.structured import Ontology, parse_structured_frame
 from anne.tools.github_repo import GitHubRepoTool
@@ -150,6 +151,7 @@ omit only when no semantic extraction is useful.
         self.metacognition = Metacognition()
         self.semantic_validator = NeuroSymbolicValidator()
         self.ontology = Ontology()
+        self.tool_policy = ToolPolicy()
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
@@ -168,6 +170,9 @@ omit only when no semantic extraction is useful.
         return ""
 
     def _execute_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        decision = self.tool_policy.authorize(name, arguments)
+        if not decision.allowed:
+            return {"ok": False, "error": decision.reason}
         tool = self.tools.get(name)
         if tool is None:
             return {"ok": False, "error": f"Unknown tool: {name}"}
@@ -337,7 +342,12 @@ omit only when no semantic extraction is useful.
         if preflight.status == "ABORTED":
             response = preflight.output.get("reason", "Request blocked by ANNE safety gates.")
             learning = "A request was blocked during deterministic preflight."
-            memory_path = self.memory.save(user_input, str(response), learning, 0.2)
+            memory_path = self.memory.save(
+                redact_sensitive(user_input),
+                redact_sensitive(str(response)),
+                redact_sensitive(learning),
+                0.2,
+            )
             review = self.metacognition.review(self.workspace, str(response))
             return AgentResult(
                 str(response), learning, 0.2, memory_path, [], review.__dict__
@@ -400,7 +410,10 @@ omit only when no semantic extraction is useful.
         review_data = {**review.__dict__, "reasoning_audit": self.workspace.reasoning_audit}
         self.workspace.transition("ÖĞREN")
         memory_path = self.memory.save(
-            user_input, response, learning, confidence
+            redact_sensitive(user_input),
+            redact_sensitive(response),
+            redact_sensitive(learning),
+            confidence,
         )
         return AgentResult(
             response,

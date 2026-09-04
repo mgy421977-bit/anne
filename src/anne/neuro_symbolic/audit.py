@@ -15,8 +15,25 @@ class PlanStep:
     expected_effects: list[str] = field(default_factory=list)
     risk_level: float = 0.0
     required_tools: list[str] = field(default_factory=list)
-    status: str = "pending"  # pending | running | verified | failed
+    status: str = "pending"  # pending | running | verified | failed | blocked
     verification: str = ""
+
+    def check_preconditions(self, available_facts: set[str]) -> bool:
+        """Block execution until every declared prerequisite is present."""
+        ready = all(item in available_facts for item in self.preconditions)
+        if not ready:
+            self.status = "blocked"
+        return ready
+
+    def repair(self, missing_facts: list[str]) -> PlanStep:
+        """Return a safe follow-up step that gathers missing prerequisites."""
+        return PlanStep(
+            id=f"{self.id}.repair",
+            action="gather missing prerequisites",
+            expected_effects=missing_facts,
+            risk_level=0.1,
+            status="pending",
+        )
 
     def verify(self, observed_effect: str) -> bool:
         self.verification = observed_effect
