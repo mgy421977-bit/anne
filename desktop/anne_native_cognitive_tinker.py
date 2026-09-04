@@ -122,7 +122,7 @@ class AnneNativeTinker(tk.Tk):
     def refresh_status(self) -> None:
         stats = self.transfer.stats()
         self.status_label.configure(
-            text=f"Native AI aktif • {stats['packets']} transfer paketi • {stats['facts']} bilgi • LLM gerektirmez"
+            text=f"Native AI aktif • {stats['packets']} transfer paketi • {stats['facts']} bilgi • {stats['patterns']} örüntü • {stats['rules']} kural • LLM gerektirmez"
         )
 
     def show_stats(self) -> None:
@@ -165,7 +165,7 @@ class AnneNativeTinker(tk.Tk):
             packets = payload if isinstance(payload, list) else [payload]
             added = self.transfer.ingest(packets)
             self.refresh_status()
-            self._append("ANNE ÖĞRENME", f"{added} bilgi paketi ANNE'nin yerel belleğine işlendi.")
+            self._append("ANNE ÖĞRENME", f"{added} bilgi paketi ANNE'nin yerel bilgi deposuna işlendi.")
             dialog.destroy()
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             messagebox.showerror("Aktarım Hatası", str(exc))
@@ -222,37 +222,39 @@ class AnneNativeTinker(tk.Tk):
         intent = state.task.lower()
         concepts = ", ".join(state.concepts[:8]) or "genel konu"
         best = max(state.hypotheses, key=lambda item: item.score, default=None)
+        learned = [item for item in state.evidence if item.startswith("LEARNED:")]
         if any(word in intent for word in ("merhaba", "selam", "hey")):
-            return f"Merhaba. Ben ANNE. Girdiyi kendi bilişsel döngümden geçirdim. Algıladığım kavramlar: {concepts}. Şu anda güven düzeyim {state.confidence:.2f}; konuşma ilerledikçe bağlam ve bilgi biriktirebilirim."
+            return f"Merhaba. Ben ANNE. Girdiyi kendi bilişsel döngümden geçirdim. Algıladığım kavramlar: {concepts}. Bu döngüde {len(learned)} öğrenilmiş bilgi parçasını eşleştirdim. Güvenim {state.confidence:.2f}."
         if "kendini" in intent and ("özetle" in intent or "anlat" in intent or "tanıt" in intent):
             return (
                 "Ben ANNE — DUY, BAK, GÖR, ANLA, HİSSET ve YAP aşamalarından oluşan, ÖĞREN ile geri beslenen "
-                "model-bağımsız bir bilişsel çekirdeğim. Bir dil modeline sahip olmadan da girdiyi ayrıştırabilir, "
-                "hipotezler üretebilir, belirsizliği işaretleyebilir ve sonraki adımı seçebilirim. "
-                f"Bu döngüde güvenim {state.confidence:.2f}, belirsizliğim {state.uncertainty:.2f}."
+                "model-bağımsız bir bilişsel çekirdeğim. Öğrenilmiş yapılandırılmış bilgiyi sonraki döngülerde "
+                "ilgisine göre kanıt olarak kullanırım. "
+                f"Bu döngüde {len(learned)} ilgili öğrenilmiş kayıt buldum; güvenim {state.confidence:.2f}, belirsizliğim {state.uncertainty:.2f}."
             )
         if state.unknown:
-            action = state.actions[0] if state.actions else "Ek kanıt topla ve doğrula"
+            action = state.actions[0] if state.actions else "Eksik kanıtı belirle, araştır ve doğrula"
             source_line = "İnternet araştırması kullanıldı." if web_used else "Harici kanıt kullanılmadı."
             return (
                 f"Bu girdiyi işledim. Ana kavramlar: {concepts}. {source_line} "
-                f"Mevcut durumda kesin bilgi üretmek için yeterli doğrulanmış kanıtım yok. "
-                f"HİSSET aşamam güveni {state.confidence:.2f}, belirsizliği {state.uncertainty:.2f} hesapladı. "
-                f"Önerdiğim sonraki adım: {action}."
+                f"Eşleşen öğrenilmiş bilgi: {len(learned)}. Kesin sonuç için doğrulanmış kanıtım henüz yeterli değil. "
+                f"Güvenim {state.confidence:.2f}, belirsizliğim {state.uncertainty:.2f}. Önerdiğim sonraki adım: {action}."
             )
         evidence = f" {len(state.evidence)} kanıt kaydı bulundu."
         hypothesis = best.text if best else "Mevcut bağlamı sürdürmek"
-        learning = f" Bu döngüden {len(state.lessons)} ders kaydettim." if state.lessons else ""
+        learned_line = f" {len(learned)} öğrenilmiş kayıt hipotezi etkiledi." if learned else " Öğrenilmiş eşleşme bulunmadı."
         return (
-            f"Girdiyi kendi bilişsel motorumla değerlendirdim. Kavramlar: {concepts}.{evidence} "
+            f"Girdiyi kendi bilişsel motorumla değerlendirdim. Kavramlar: {concepts}.{evidence}{learned_line} "
             f"En güçlü yorumum: {hypothesis}. Güvenim {state.confidence:.2f}; belirsizliğim {state.uncertainty:.2f}. "
-            f"Sonraki adım: {state.actions[0] if state.actions else 'Sonucu gözlemle ve kaydet'}.{learning}"
+            f"Sonraki adım: {state.actions[0] if state.actions else 'Sonucu gözlemle, karşılaştır ve yeni ders çıkar'}."
         )
 
     def _worker(self, text: str, context: str) -> None:
         try:
             memory = LocalMemory()
-            self.engine.cycle(text, memory=memory.load_context(), evidence=[context] if context else [])
+            knowledge = self.transfer.context()
+            evidence = [context] if context else []
+            self.engine.cycle(text, memory=memory.load_context(), evidence=evidence, knowledge=knowledge)
             state = self.engine.snapshot()
             for phase in PHASES[:6]:
                 self.result_queue.put(("phase", phase))
@@ -263,26 +265,34 @@ class AnneNativeTinker(tk.Tk):
                     results = WebResearchClient().search(text, max_results=4)
                     web_used = bool(results)
                     if results:
-                        context = WebResearchClient.format_results(results) + "\n\n" + context
+                        web_context = WebResearchClient.format_results(results)
+                        if web_context:
+                            self.engine.bak(evidence=[web_context])
                         self.result_queue.put(("web", results))
                 except Exception as exc:
-                    context += f"\n\nWEB ERROR: {exc}"
-            knowledge = self.transfer.context()
+                    self.result_queue.put(("status", f"Web araştırması başarısız: {exc}"))
+            # Re-run the decision stage after web evidence so YAP can change its action.
+            if web_used:
+                self.engine.gor()
+                self.engine.anla(text)
+                self.engine.hisset()
+                self.engine.yap()
+                state = self.engine.state
             response = self._native_response(state, knowledge, web_used)
             if self.learning.get():
                 packet = {
                     "topic": state.concepts[0] if state.concepts else "general",
-                    "facts": state.known[:4],
-                    "patterns": state.observations[-4:],
+                    "facts": [item for item in state.known[:6] if not item.startswith("Persistent")],
+                    "patterns": [item for item in state.observations[-6:] if item.startswith("GÖR:")],
                     "rules": state.actions[:2],
                     "examples": [text[:500]],
                     "cautions": state.unknown[:3],
                     "source": "ANNE-native-cycle",
                 }
                 self.transfer.ingest([packet])
-                self.engine.ogren(response, "Native cycle completed and stored.")
+                self.engine.ogren(response, "Cycle result stored; relevant learned knowledge is fed back into future cycles.")
             self.result_queue.put(("response", response))
-            self.result_queue.put(("status", f"ANNE döngüyü tamamladı • güven {state.confidence:.2f} • ÖĞREN güncellendi"))
+            self.result_queue.put(("status", f"ANNE döngüyü tamamladı • güven {state.confidence:.2f} • {len([e for e in state.evidence if e.startswith('LEARNED:')])} öğrenilmiş eşleşme • ÖĞREN güncellendi"))
             self.result_queue.put(("refresh", None))
         except Exception as exc:
             self.result_queue.put(("error", str(exc)))
