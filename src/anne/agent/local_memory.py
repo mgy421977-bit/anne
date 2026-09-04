@@ -1,4 +1,4 @@
-"""Local durable memory for offline ANNE Tinker sessions."""
+"""Local durable memory for ANNE Tinker sessions."""
 
 from __future__ import annotations
 
@@ -7,16 +7,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from anne.core.data_paths import anne_memory_root
+
 
 class LocalMemory:
-    """Small JSON memory store used when GitHub credentials are not supplied."""
+    """JSON memory store rooted in ANNE's dedicated persistent data area."""
 
     token = ""
     repository = "local/anne"
     branch = "local"
 
     def __init__(self, root: str | Path | None = None) -> None:
-        self.root = Path(root or Path.home() / ".anne" / "memory")
+        self.root = Path(root) if root else anne_memory_root()
         self.root.mkdir(parents=True, exist_ok=True)
         self._last_user_input = ""
 
@@ -48,7 +50,6 @@ class LocalMemory:
         )
 
     def load_context(self, limit: int = 8) -> str:
-        """Compatibility method matching the durable memory interface."""
         return self.context(limit)
 
     def save(
@@ -80,7 +81,6 @@ class LocalMemory:
         self._last_user_input = user_input
 
     def save_learning(self, learning: str, response: str = "", confidence: float = 0.5) -> str:
-        """Persist a learning item using the most recent Tinker input when available."""
         return self.save(
             user_input=self._last_user_input,
             response=response,
