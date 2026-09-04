@@ -21,7 +21,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -43,4 +43,24 @@ jobs:
         with:
           name: ANNE_Tinker_Windows
           path: dist/ANNE_Tinker.exe
+          if-no-files-found: error
+
+      - name: Package full ANNE source
+        shell: pwsh
+        run: |
+          if (Test-Path 'anne_tinker_source') { Remove-Item 'anne_tinker_source' -Recurse -Force }
+          New-Item -ItemType Directory -Path 'anne_tinker_source' | Out-Null
+          Copy-Item 'desktop' 'anne_tinker_source\desktop' -Recurse
+          Copy-Item 'src' 'anne_tinker_source\src' -Recurse
+          Copy-Item 'pyproject.toml' 'anne_tinker_source\pyproject.toml'
+          Copy-Item 'requirements.txt' 'anne_tinker_source\requirements.txt'
+          Copy-Item 'README.md' 'anne_tinker_source\README.md'
+          Copy-Item 'governance' 'anne_tinker_source\governance' -Recurse
+          Compress-Archive -Path 'anne_tinker_source\*' -DestinationPath 'ANNE_Tinker_Full_Source.zip' -Force
+
+      - name: Upload full ANNE source
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Tinker_Full_Source
+          path: ANNE_Tinker_Full_Source.zip
           if-no-files-found: error
