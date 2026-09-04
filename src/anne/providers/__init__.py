@@ -1,15 +1,18 @@
 """Model providers for ANNE.
 
-Provider SDKs are loaded lazily so local Ollama mode does not require
-cloud-provider packages just to start the desktop client.
+Provider SDKs are loaded lazily so local modes do not require every optional
+runtime just to start the desktop client.
 """
 
 from typing import Any
 
-__all__ = ["GeminiProvider", "OllamaProvider", "OpenRouterProvider"]
+__all__ = ["EmbeddedAIProvider", "GeminiProvider", "OllamaProvider", "OpenRouterProvider"]
 
 
 def __getattr__(name: str) -> Any:
+    if name == "EmbeddedAIProvider":
+        from .embedded import EmbeddedAIProvider
+        return EmbeddedAIProvider
     if name == "GeminiProvider":
         from .gemini import GeminiProvider
         return GeminiProvider
