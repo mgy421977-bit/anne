@@ -1,37 +1,48 @@
-"""ANNE native AI kernel: deterministic reasoning independent of any LLM."""
+"""ANNE's model-independent six-stage cognitive engine.
+
+The engine owns the cognitive state machine. Optional language models may
+verbalize or enrich a stage, but they do not own the lifecycle.
+"""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 
+PHASES = ("DUY", "BAK", "GÖR", "ANLA", "HİSSET", "YAP", "ÖĞREN")
+
+
 @dataclass
-class Knowledge:
-    facts: list[str] = field(default_factory=list)
-    questions: list[str] = field(default_factory=list)
-    hypotheses: list[str] = field(default_factory=list)
+class Hypothesis:
+    text: str
+    score: float = 0.0
     evidence: list[str] = field(default_factory=list)
+    counter_evidence: list[str] = field(default_factory=list)
 
 
 @dataclass
-class KernelResult:
-    intent: str
-    concepts: list[str]
-    knowledge: Knowledge
-    plan: list[str]
-    confidence: float
-    response: str
+class CognitiveState:
+    task: str
+    phase: str = "DUY"
+    concepts: list[str] = field(default_factory=list)
+    observations: list[str] = field(default_factory=list)
+    hypotheses: list[Hypothesis] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    known: list[str] = field(default_factory=list)
+    unknown: list[str] = field(default_factory=list)
+    actions: list[str] = field(default_factory=list)
+    lessons: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    uncertainty: float = 1.0
+    cycle: int = 0
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-class AnneAIKernel:
-    """Model-independent AI layer for perception, reasoning and planning.
-
-    It deliberately does not pretend to be a foundation model. Its value is
-    inspectable state, lightweight inference, contradiction detection and
-    bounded planning that remain available when no LLM is running.
-    """
+class AnneCognitiveEngine:
+    """Deterministic, inspectable DUY→BAK→GÖR→ANLA→HİSSET→YAP→ÖĞREN loop."""
 
     STOPWORDS = {
         "ve", "veya", "ile", "bir", "bu", "şu", "için", "nasıl", "neden",
@@ -39,22 +50,145 @@ class AnneAIKernel:
         "olanın", "the", "and", "or", "with", "for", "what", "why", "how",
     }
 
-    def __init__(self, max_concepts: int = 12) -> None:
-        if max_concepts < 1:
-            raise ValueError("max_concepts must be positive")
-        self.max_concepts = max_concepts
-        self.knowledge = Knowledge()
+    def __init__(self, max_concepts: int = 12, max_hypotheses: int = 5) -> None:
+        self.max_concepts = max(1, max_concepts)
+        self.max_hypotheses = max(1, max_hypotheses)
+        self.state: CognitiveState | None = None
 
-    def perceive(self, text: str) -> list[str]:
+    def start(self, task: str) -> CognitiveState:
+        self.state = CognitiveState(task=task)
+        return self.state
+
+    def _require_state(self) -> CognitiveState:
+        if self.state is None:
+            raise RuntimeError("Cognitive cycle has not been started")
+        return self.state
+
+    def _set_phase(self, phase: str) -> None:
+        state = self._require_state()
+        if phase not in PHASES:
+            raise ValueError(f"Unknown cognitive phase: {phase}")
+        state.phase = phase
+
+    def duy(self, text: str) -> list[str]:
+        state = self._require_state()
+        self._set_phase("DUY")
         tokens = re.findall(r"[\wçğıöşüÇĞİÖŞÜ-]{3,}", text.lower())
-        concepts: list[str] = []
+        state.concepts = []
         for token in tokens:
-            if token in self.STOPWORDS or token in concepts:
+            if token in self.STOPWORDS or token in state.concepts:
                 continue
-            concepts.append(token)
-            if len(concepts) >= self.max_concepts:
+            state.concepts.append(token)
+            if len(state.concepts) >= self.max_concepts:
                 break
-        return concepts
+        state.observations.append(f"DUY: {len(state.concepts)} kavram algılandı")
+        return list(state.concepts)
+
+    def bak(self, memory: str = "", evidence: list[str] | None = None) -> None:
+        state = self._require_state()
+        self._set_phase("BAK")
+        if memory.strip():
+            state.observations.append("BAK: geçmiş bağlam incelendi")
+            state.known.append("Persistent memory was available")
+        for item in evidence or []:
+            item = item.strip()
+            if item and item not in state.evidence:
+                state.evidence.append(item)
+                state.known.append(item)
+        if not state.evidence:
+            state.unknown.append("No explicit external evidence was supplied")
+
+    def gor(self) -> list[str]:
+        state = self._require_state()
+        self._set_phase("GÖR")
+        patterns: list[str] = []
+        if len(state.concepts) >= 2:
+            patterns.append("concept relationship")
+        if state.evidence:
+            patterns.append("evidence-backed pattern")
+        if not patterns:
+            patterns.append("insufficient pattern evidence")
+        state.observations.extend(f"GÖR: {pattern}" for pattern in patterns)
+        return patterns
+
+    def anla(self, text: str) -> list[Hypothesis]:
+        state = self._require_state()
+        self._set_phase("ANLA")
+        intent = self.infer_intent(text)
+        candidates: list[Hypothesis] = []
+        if intent == "question":
+            candidates.append(Hypothesis("Soruyu mevcut kanıt ve bağlamla açıklamak", 0.45))
+            candidates.append(Hypothesis("Eksik kanıtı araştırarak açıklamak", 0.35))
+        elif intent == "research":
+            candidates.append(Hypothesis("Kaynakları karşılaştırıp ortak bulguyu çıkarmak", 0.45))
+            candidates.append(Hypothesis("Çelişen kaynakları ayrı hipotezler olarak tutmak", 0.35))
+        elif intent == "action":
+            candidates.append(Hypothesis("Görevi küçük doğrulanabilir adımlara bölmek", 0.50))
+            candidates.append(Hypothesis("Önce gereksinimleri doğrulamak", 0.30))
+        else:
+            candidates.append(Hypothesis("Girdiyi bağlama yerleştirip sonraki adımı seçmek", 0.40))
+        if state.evidence:
+            for hypothesis in candidates:
+                hypothesis.score = min(1.0, hypothesis.score + min(0.20, 0.03 * len(state.evidence)))
+        state.hypotheses = candidates[: self.max_hypotheses]
+        return list(state.hypotheses)
+
+    def hisset(self) -> float:
+        state = self._require_state()
+        self._set_phase("HİSSET")
+        evidence_bonus = min(0.35, 0.05 * len(state.evidence))
+        uncertainty = max(0.0, 1.0 - evidence_bonus)
+        if state.unknown:
+            uncertainty = min(1.0, uncertainty + 0.10)
+        best = max((hypothesis.score for hypothesis in state.hypotheses), default=0.25)
+        state.confidence = max(0.0, min(1.0, best * 0.7 + evidence_bonus * 0.8))
+        state.uncertainty = uncertainty
+        if state.confidence < 0.55 or state.unknown:
+            state.observations.append("HİSSET: doğrulama ihtiyacı yüksek")
+        else:
+            state.observations.append("HİSSET: mevcut kanıtla yeterli güven")
+        return state.confidence
+
+    def yap(self) -> list[str]:
+        state = self._require_state()
+        self._set_phase("YAP")
+        actions: list[str] = []
+        if state.unknown or state.confidence < 0.55:
+            actions.append("Ek kanıt topla ve doğrula")
+        else:
+            actions.append("En güçlü hipotezi uygula veya açıkla")
+        actions.append("Sonucu gözle ve kaydet")
+        state.actions = actions
+        return list(actions)
+
+    def ogren(self, outcome: str, lesson: str = "") -> list[str]:
+        state = self._require_state()
+        self._set_phase("ÖĞREN")
+        state.cycle += 1
+        text = lesson.strip() or outcome.strip()
+        if text:
+            state.lessons.append(text)
+        state.observations.append(f"ÖĞREN: {len(state.lessons)} ders birikmiş durumda")
+        return list(state.lessons)
+
+    def cycle(
+        self,
+        text: str,
+        memory: str = "",
+        evidence: list[str] | None = None,
+        outcome: str = "",
+        lesson: str = "",
+    ) -> CognitiveState:
+        self.start(text)
+        self.duy(text)
+        self.bak(memory, evidence)
+        self.gor()
+        self.anla(text)
+        self.hisset()
+        self.yap()
+        self.ogren(outcome, lesson)
+        self._set_phase("DUY")
+        return self._require_state()
 
     def infer_intent(self, text: str) -> str:
         lowered = text.lower().strip()
@@ -66,79 +200,12 @@ class AnneAIKernel:
             return "action"
         return "statement"
 
-    def update_knowledge(self, text: str, evidence: list[str] | None = None) -> Knowledge:
-        intent = self.infer_intent(text)
-        concepts = self.perceive(text)
-        if intent == "question":
-            question = text.strip()
-            if question and question not in self.knowledge.questions:
-                self.knowledge.questions.append(question)
-        else:
-            for concept in concepts:
-                fact = f"Observed concept: {concept}"
-                if fact not in self.knowledge.facts:
-                    self.knowledge.facts.append(fact)
-        if evidence:
-            for item in evidence:
-                if item and item not in self.knowledge.evidence:
-                    self.knowledge.evidence.append(item)
-        return self.knowledge
-
-    def detect_contradictions(self) -> list[tuple[str, str]]:
-        contradictions: list[tuple[str, str]] = []
-        facts = self.knowledge.facts
-        positive = [f for f in facts if not f.lower().startswith(("not ", "değil "))]
-        negative = [f for f in facts if f.lower().startswith(("not ", "değil "))]
-        for pos in positive:
-            term = pos.split(": ", 1)[-1]
-            if any(term == neg.split(": ", 1)[-1].removeprefix("değil ") for neg in negative):
-                contradictions.append((pos, next(neg for neg in negative if term in neg)))
-        return contradictions
-
-    def plan(self, text: str) -> list[str]:
-        intent = self.infer_intent(text)
-        if intent == "research":
-            return ["Tanımla", "Kanıt topla", "Kaynakları karşılaştır", "Belirsizlikleri işaretle", "Sonuçlandır"]
-        if intent == "action":
-            return ["Hedefi tanımla", "Gereksinimleri çıkar", "Uygula", "Doğrula"]
-        if intent == "question":
-            return ["Soruyu ayrıştır", "Bilinenleri ayır", "Eksikleri belirle", "Yanıtı oluştur"]
-        return ["Girdiyi yorumla", "Bağlamı güncelle", "Uygun sonraki adımı seç"]
-
-    def reason(self, text: str, evidence: list[str] | None = None) -> KernelResult:
-        concepts = self.perceive(text)
-        knowledge = self.update_knowledge(text, evidence=evidence)
-        contradictions = self.detect_contradictions()
-        plan = self.plan(text)
-        confidence = 0.35
-        if concepts:
-            confidence += 0.15
-        if knowledge.evidence:
-            confidence += min(0.3, 0.05 * len(knowledge.evidence))
-        confidence -= min(0.25, 0.1 * len(contradictions))
-        confidence = max(0.0, min(1.0, confidence))
-        if contradictions:
-            response = "Çelişen bilgiler tespit edildi; doğrulama gerekiyor."
-        elif self.infer_intent(text) == "question":
-            response = "Soruyu ayrıştırdım. Eksik kanıt varsa araştırma veya ek bağlam gerekiyor."
-        else:
-            response = "Girdi işlendi; ANNE kendi bağlamını güncelledi ve sonraki adımı belirledi."
-        return KernelResult(
-            intent=self.infer_intent(text),
-            concepts=concepts,
-            knowledge=knowledge,
-            plan=plan,
-            confidence=confidence,
-            response=response,
-        )
-
     def snapshot(self) -> dict[str, Any]:
-        return {
-            "facts": list(self.knowledge.facts),
-            "questions": list(self.knowledge.questions),
-            "hypotheses": list(self.knowledge.hypotheses),
-            "evidence": list(self.knowledge.evidence),
-        }
+        state = self._require_state()
+        return asdict(state)
 
 
-__all__ = ["AnneAIKernel", "Knowledge", "KernelResult"]
+# Backward-compatible name used by earlier runtime code.
+AnneAIKernel = AnneCognitiveEngine
+
+__all__ = ["AnneAIKernel", "AnneCognitiveEngine", "CognitiveState", "Hypothesis", "PHASES"]
