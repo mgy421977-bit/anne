@@ -38,8 +38,9 @@ class AnneTinker(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ANNE AI — Windows Tinker")
-        self.geometry("1180x860")
-        self.minsize(980, 700)
+        # Keep the complete chat input visible on common 768px-tall Windows screens.
+        self.geometry("1180x700")
+        self.minsize(980, 600)
         self.result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.attachments: list[Path] = []
         self._build_ui()
@@ -120,7 +121,7 @@ class AnneTinker(tk.Tk):
 
         input_frame = ttk.Frame(root)
         input_frame.pack(fill="x")
-        self.input_box = tk.Text(input_frame, height=6, wrap="word", font=("Segoe UI", 10))
+        self.input_box = tk.Text(input_frame, height=4, wrap="word", font=("Segoe UI", 10))
         self.input_box.pack(side="left", fill="both", expand=True)
         self.input_box.bind("<Control-Return>", lambda _event: self.send())
 
