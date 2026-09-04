@@ -32,12 +32,16 @@ class EmbeddedAIProvider:
         n_threads: int | None = None,
         max_tokens: int = 256,
         temperature: float = 0.2,
+        repeat_penalty: float = 1.12,
+        top_p: float = 0.9,
     ) -> None:
         self.model_path = self._resolve_model_path(model_path)
         self.n_ctx = n_ctx
         self.n_threads = n_threads or max(1, min(2, os.cpu_count() or 2))
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.repeat_penalty = repeat_penalty
+        self.top_p = top_p
         self._llm: Any = None
 
     @classmethod
@@ -97,6 +101,8 @@ class EmbeddedAIProvider:
         result = llm.create_chat_completion(
             messages=messages,
             temperature=self.temperature,
+            top_p=self.top_p,
+            repeat_penalty=self.repeat_penalty,
             max_tokens=self.max_tokens,
         )
         if not isinstance(result, dict):
