@@ -16,6 +16,12 @@ from anne.core.cognitive_runtime import (
     Metacognition,
 )
 from anne.core.decision_loop import DecisionLoop
+from anne.multi_agent import (
+    AgentRole,
+    CollaborationResult,
+    MultiAgentCoordinator,
+    Worker,
+)
 from anne.neuro_symbolic.audit import NeuroSymbolicValidator
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
@@ -152,6 +158,14 @@ omit only when no semantic extraction is useful.
         self.semantic_validator = NeuroSymbolicValidator()
         self.ontology = Ontology()
         self.tool_policy = ToolPolicy()
+        self.collaborator = MultiAgentCoordinator(
+            roles=[
+                AgentRole("researcher", "collect relevant evidence"),
+                AgentRole("critic", "challenge assumptions"),
+                AgentRole("planner", "propose a verifiable next step"),
+            ],
+            max_rounds=2,
+        )
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
@@ -161,6 +175,10 @@ omit only when no semantic extraction is useful.
             "local_list": self.local_tools.list,
             "local_read": self.local_tools.read,
         }
+
+    def collaborate(self, task: str, workers: dict[str, Worker]) -> CollaborationResult:
+        """Run bounded specialist collaboration without erasing dissent."""
+        return self.collaborator.collaborate(task, workers)
 
     @staticmethod
     def _section(text: str, name: str) -> str:

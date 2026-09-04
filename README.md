@@ -126,6 +126,15 @@ grounding extractor is intentionally conservative and deterministic; it is a
 stable contract for a future neural parser, not a claim of human-level semantic
 understanding.
 
+### Multi-agent collaboration
+
+ANNE includes a bounded specialist coordinator with researcher, critic, and
+planner roles. Specialists publish evidence to a shared workspace, deliberate
+for a fixed number of rounds, and produce a consensus only when it is supported
+by multiple messages. Disagreement is retained explicitly rather than being
+silently averaged away. The coordinator is a deterministic orchestration layer;
+it does not claim that independent prompts create independent minds.
+
 ### v0.4 reliability and safety core
 
 The agent now applies an allowlisted tool policy, redacts common credentials
