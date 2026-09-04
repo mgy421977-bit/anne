@@ -59,13 +59,19 @@ class EmbeddedAIProvider:
     def ping(self) -> bool:
         return self.is_installed()
 
+    def _ensure_default_model(self) -> None:
+        if self.is_installed():
+            return
+        if self.model_path != self.default_model_path():
+            raise FileNotFoundError(
+                "Embedded model not found: "
+                f"{self.model_path}."
+            )
+        self.download_default_model()
+
     def _load(self) -> Any:
         if self._llm is None:
-            if not self.is_installed():
-                raise FileNotFoundError(
-                    "Embedded model not found: "
-                    f"{self.model_path}. Download it from the ANNE Tinker UI first."
-                )
+            self._ensure_default_model()
             try:
                 from llama_cpp import Llama
             except ImportError as exc:
