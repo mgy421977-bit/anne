@@ -9,6 +9,7 @@ from .core import (
     SemanticFrame,
     frame_from_text,
 )
+from .structured import Ontology, OntologyIssue, parse_structured_frame
 
 __all__ = [
     "Claim",
@@ -18,4 +19,7 @@ __all__ = [
     "Relation",
     "SemanticFrame",
     "frame_from_text",
+    "Ontology",
+    "OntologyIssue",
+    "parse_structured_frame",
 ]

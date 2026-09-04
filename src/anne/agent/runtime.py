@@ -20,6 +20,7 @@ from anne.neuro_symbolic.audit import NeuroSymbolicValidator
 from anne.providers.gemini import GeminiProvider
 from anne.providers.openrouter import OpenRouterProvider
 from anne.semantics.core import frame_from_text
+from anne.semantics.structured import Ontology, parse_structured_frame
 from anne.tools.github_repo import GitHubRepoTool
 from anne.tools.local_files import LocalFilesTool
 
@@ -58,6 +59,10 @@ Final response format:
 1-3 concise reusable facts, insights, or lessons learned,
 or No new durable learning.
 </LEARNING>
+<SEMANTIC_FRAME>
+optional JSON object with text, entities, relations, claims, evidence, confidence;
+omit only when no semantic extraction is useful.
+</SEMANTIC_FRAME>
 <CONFIDENCE>number from 0 to 1</CONFIDENCE>"""
 
     TOOL_SCHEMAS = [
@@ -144,6 +149,7 @@ or No new durable learning.
         self.planner = HierarchicalPlanner()
         self.metacognition = Metacognition()
         self.semantic_validator = NeuroSymbolicValidator()
+        self.ontology = Ontology()
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
@@ -353,6 +359,18 @@ or No new durable learning.
 
         self.workspace.transition("ANLA")
         response = self._section(raw, "RESPONSE") or raw.strip()
+        structured = self._section(raw, "SEMANTIC_FRAME")
+        if structured:
+            try:
+                self.workspace.semantic_frame = parse_structured_frame(structured)
+                issues = self.ontology.validate(self.workspace.semantic_frame)
+                self.workspace.observations.append(
+                    f"Model semantic frame parsed; ontology issues={len(issues)}"
+                )
+            except (ValueError, TypeError):
+                self.workspace.observations.append(
+                    "Model semantic frame invalid; text grounding retained"
+                )
         learning = (
             self._section(raw, "LEARNING")
             or "No new durable learning."
