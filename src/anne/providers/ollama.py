@@ -12,13 +12,15 @@ import urllib.error
 import urllib.request
 from typing import Any, cast
 
+from anne.providers.openrouter import OpenRouterProvider
 
-class OllamaProvider:
-    """Small dependency-free client for a local Ollama instance."""
+
+class OllamaProvider(OpenRouterProvider):
+    """Local Ollama client with the same tool-capable interface as OpenRouter."""
 
     DEFAULT_BASE_URL = "http://127.0.0.1:11434"
     DEFAULT_MODEL = "gemma3:4b"
-    supports_tools = False
+    supports_tools = True
 
     def __init__(
         self,
@@ -31,6 +33,7 @@ class OllamaProvider:
         self.model = model or os.getenv("ANNE_OLLAMA_MODEL", self.DEFAULT_MODEL)
         env_timeout = os.getenv("ANNE_OLLAMA_TIMEOUT")
         self.timeout = int(env_timeout) if env_timeout else timeout
+        self.api_key = "ollama-local"
 
     @property
     def endpoint(self) -> str:
@@ -48,13 +51,22 @@ class OllamaProvider:
         except (urllib.error.URLError, TimeoutError, OSError):
             return False
 
-    def chat(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
             "stream": False,
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+            payload["parallel_tool_calls"] = False
+
         request = urllib.request.Request(
             self.endpoint,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
