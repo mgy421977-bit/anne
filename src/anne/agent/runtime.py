@@ -1,30 +1,22 @@
+# ruff: noqa: E501
 """ANNE tool-using agent runtime with bounded native tool calling."""
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from anne.agent.github_memory import GitHubMemory
-from anne.core.cognitive_runtime import (
-    CognitiveWorkspace,
-    HierarchicalPlanner,
-    Metacognition,
-)
+from anne.core.ai_kernel import AnneAIKernel
+from anne.core.cognitive_runtime import CognitiveWorkspace, HierarchicalPlanner, Metacognition
 from anne.core.decision_loop import DecisionLoop
-from anne.multi_agent import (
-    AgentRole,
-    CollaborationResult,
-    MultiAgentCoordinator,
-    Worker,
-)
+from anne.multi_agent import AgentRole, CollaborationResult, MultiAgentCoordinator, Worker
 from anne.neuro_symbolic.audit import NeuroSymbolicValidator
-from anne.providers.gemini import GeminiProvider
-from anne.providers.openrouter import OpenRouterProvider
 from anne.safety.policy import ToolPolicy, redact_sensitive
 from anne.semantics.core import frame_from_text
 from anne.semantics.structured import Ontology, parse_structured_frame
@@ -43,7 +35,7 @@ class AgentResult:
 
 
 class AnneAgent:
-    """Coordinates reasoning models, safe tools, and persistent GitHub memory."""
+    """Coordinates ANNE's native AI kernel, models, safe tools, and memory."""
 
     MAX_TOOL_ROUNDS = 1
     MAX_FINAL_RETRIES = 0
@@ -51,6 +43,9 @@ class AnneAgent:
     SYSTEM = """You are ANNE (Adaptive Neural Nexus Engine), an experimental AI cognitive agent.
 You are not a claim of AGI or consciousness.
 Use DUY -> BAK -> GÖR -> ANLA -> HİSSET -> YAP as a reasoning discipline.
+ANNE has a native model-independent AI kernel. Treat its intent, concepts,
+plan, knowledge state, and confidence as the first-pass reasoning substrate.
+The language model is a language/reasoning assistant, not ANNE itself.
 Treat persistent memory as prior context, not unquestionable truth.
 Do not invent repository facts. Use tools when evidence is required.
 Use the minimum number of tools necessary.
@@ -72,85 +67,22 @@ omit only when no semantic extraction is useful.
 </SEMANTIC_FRAME>
 <CONFIDENCE>number from 0 to 1</CONFIDENCE>"""
 
-    TOOL_SCHEMAS = [
-        {
-            "type": "function",
-            "function": {
-                "name": "github_read_file",
-                "description": (
-                    "Read one UTF-8 text file from the configured ANNE GitHub "
-                    "repository. Use this first for an exact path."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": ["path"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "github_list",
-                "description": "List a repository directory only when the location is unknown.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": [],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "github_search",
-                "description": (
-                    "Search repository code only when the exact location or "
-                    "additional evidence is unknown."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "local_list",
-                "description": "List files in the local ANNE Windows workspace.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": [],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "local_read",
-                "description": "Read a UTF-8 file in the local ANNE Windows workspace.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"path": {"type": "string"}},
-                    "required": ["path"],
-                },
-            },
-        },
+    TOOL_SCHEMAS: list[dict[str, Any]] = [
+        {"type": "function", "function": {"name": "github_read_file", "description": "Read one UTF-8 text file from the configured ANNE GitHub repository. Use this first for an exact path.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "github_list", "description": "List a repository directory only when the location is unknown.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}}},
+        {"type": "function", "function": {"name": "github_search", "description": "Search repository code only when the exact location or additional evidence is unknown.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "local_list", "description": "List files in the local ANNE Windows workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": []}}},
+        {"type": "function", "function": {"name": "local_read", "description": "Read a UTF-8 file in the local ANNE Windows workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     ]
 
-    def __init__(
-        self,
-        model: GeminiProvider | OpenRouterProvider,
-        memory: GitHubMemory,
-        workspace: str | Path | None = None,
-    ) -> None:
+    def __init__(self, model: Any, memory: Any, workspace: str | Path | None = None) -> None:
         self.model = model
         self.memory = memory
-        self.github_tools = GitHubRepoTool(
-            memory.token, memory.repository, memory.branch
+        self.ai_kernel = AnneAIKernel()
+        self.github_tools = (
+            GitHubRepoTool(memory.token, memory.repository, memory.branch)
+            if getattr(memory, "token", "")
+            else None
         )
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
         self.planner = HierarchicalPlanner()
@@ -169,15 +101,19 @@ omit only when no semantic extraction is useful.
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
-            "github_read_file": self.github_tools.read_file,
-            "github_list": self.github_tools.list_directory,
-            "github_search": self.github_tools.search_code,
             "local_list": self.local_tools.list,
             "local_read": self.local_tools.read,
         }
+        if self.github_tools is not None:
+            self.tools.update(
+                {
+                    "github_read_file": self.github_tools.read_file,
+                    "github_list": self.github_tools.list_directory,
+                    "github_search": self.github_tools.search_code,
+                }
+            )
 
     def collaborate(self, task: str, workers: dict[str, Worker]) -> CollaborationResult:
-        """Run bounded specialist collaboration without erasing dissent."""
         return self.collaborator.collaborate(task, workers)
 
     @staticmethod
@@ -196,19 +132,16 @@ omit only when no semantic extraction is useful.
             return {"ok": False, "error": f"Unknown tool: {name}"}
         try:
             result = tool(**arguments)
-            workspace = getattr(self, "workspace", None)
-            if workspace is not None:
-                workspace.record_tool_result(name, result, ok=True)
+            if self.workspace is not None:
+                self.workspace.record_tool_result(name, result, ok=True)
             return {"ok": True, "result": result}
         except Exception as exc:
-            workspace = getattr(self, "workspace", None)
-            if workspace is not None:
-                workspace.record_tool_result(name, str(exc), ok=False)
+            if self.workspace is not None:
+                self.workspace.record_tool_result(name, str(exc), ok=False)
             return {"ok": False, "error": str(exc)}
 
     @staticmethod
     def _explicit_repo_paths(user_input: str) -> list[str]:
-        """Extract explicit src/anne/... paths for deterministic prefetching."""
         pattern = r"(?:`|\s)(src/anne/[A-Za-z0-9_./-]+)(?:`|\s|$)"
         seen: set[str] = set()
         paths: list[str] = []
@@ -225,219 +158,242 @@ omit only when no semantic extraction is useful.
         messages: list[dict[str, Any]],
         tools_used: list[str],
     ) -> None:
+        if self.github_tools is None:
+            return
         paths = self._explicit_repo_paths(user_input)
         if not paths:
             return
-
         evidence: list[dict[str, Any]] = []
         for path in paths:
             result = self._execute_tool("github_read_file", {"path": path})
             tools_used.append("github_read_file")
             evidence.append({"path": path, "evidence": result})
-
         messages.append(
             {
                 "role": "user",
                 "content": (
-                    "AUTHORITATIVE REPOSITORY EVIDENCE "
-                    "(prefetched directly by ANNE):\n"
-                    f"{json.dumps(evidence, ensure_ascii=False)}\n\n"
-                    "Analyze this evidence directly. Do not call "
-                    "github_read_file again for these paths."
+                    "AUTHORITATIVE REPOSITORY EVIDENCE (prefetched directly by ANNE):\n"
+                    + json.dumps(evidence, ensure_ascii=False)
+                    + "\n\nAnalyze this evidence directly. Do not call github_read_file again for these paths."
                 ),
             }
         )
+
+    def _native_kernel_context(self, user_input: str) -> tuple[str, float]:
+        result = self.ai_kernel.reason(user_input)
+        if self.workspace is not None:
+            self.workspace.active_hypotheses.extend(result.knowledge.hypotheses)
+            self.workspace.observations.append(
+                f"Native kernel intent={result.intent}; concepts={len(result.concepts)}; "
+                f"kernel_confidence={result.confidence:.2f}"
+            )
+            self.workspace.uncertainty = 1.0 - result.confidence
+        context = (
+            "===== ANNE NATIVE AI KERNEL =====\n"
+            f"INTENT: {result.intent}\n"
+            f"CONCEPTS: {json.dumps(result.concepts, ensure_ascii=False)}\n"
+            f"PLAN: {json.dumps(result.plan, ensure_ascii=False)}\n"
+            f"KNOWLEDGE: {json.dumps(result.knowledge.facts, ensure_ascii=False)}\n"
+            f"OPEN QUESTIONS: {json.dumps(result.knowledge.questions, ensure_ascii=False)}\n"
+            f"KERNEL CONFIDENCE: {result.confidence:.2f}\n"
+            "The kernel state is ANNE-owned reasoning state; do not overwrite it silently."
+        )
+        return context, result.confidence
+
+    def _tool_run(
+        self,
+        user_input: str,
+        memory_context: str,
+        external_context: str = "",
+    ) -> tuple[str, list[str]]:
+        kernel_context, _kernel_confidence = self._native_kernel_context(user_input)
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"{kernel_context}\n\n"
+                    f"PERSISTENT MEMORY:\n{memory_context}\n\n"
+                    f"RESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\n"
+                    f"CURRENT USER INPUT:\n{user_input}"
+                ),
+            },
+        ]
+        tools_used: list[str] = []
+        self._prefetch_explicit_repo_evidence(user_input, messages, tools_used)
+        tool_schemas = self.TOOL_SCHEMAS
+        if self.github_tools is None:
+            tool_schemas = [
+                schema
+                for schema in self.TOOL_SCHEMAS
+                if schema["function"]["name"]
+                not in {"github_read_file", "github_list", "github_search"}
+            ]
+        for _ in range(self.MAX_TOOL_ROUNDS):
+            data = self.model.chat(messages, tools=tool_schemas)
+            choices = data.get("choices") or []
+            if not choices:
+                break
+            message = choices[0].get("message") or {}
+            tool_calls = message.get("tool_calls") or []
+            messages.append(message)
+            if not tool_calls:
+                content = str(message.get("content") or "").strip()
+                if content:
+                    return content, tools_used
+                break
+            for call in tool_calls:
+                fn = call.get("function") or {}
+                name = str(fn.get("name") or "")
+                raw_args = fn.get("arguments", "{}")
+                try:
+                    arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except json.JSONDecodeError:
+                    arguments = {}
+                if not isinstance(arguments, dict):
+                    arguments = {}
+                self._execute_tool(name, arguments)
+                tools_used.append(name)
+            messages.append(
+                {
+                    "role": "tool",
+                    "content": "Tool calls executed. Continue with the final structured response.",
+                }
+            )
+        data = self.model.chat(messages, tools=[])
+        choices = data.get("choices") or []
+        if choices:
+            message = choices[0].get("message") or {}
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content, tools_used
+        return "<RESPONSE>No response generated.</RESPONSE>\n<LEARNING>No new durable learning.</LEARNING>\n<CONFIDENCE>0</CONFIDENCE>", tools_used
 
     def _openrouter_run(
         self,
         user_input: str,
         memory_context: str,
     ) -> tuple[str, list[str]]:
+        """Compatibility path retained for the historical OpenRouter runtime tests."""
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.SYSTEM},
             {
                 "role": "user",
-                "content": (
-                    f"PERSISTENT MEMORY:\n{memory_context}\n\n"
-                    f"CURRENT USER INPUT:\n{user_input}"
-                ),
+                "content": f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}",
             },
         ]
         tools_used: list[str] = []
-
-        self._prefetch_explicit_repo_evidence(
-            user_input, messages, tools_used
-        )
-
-        model = cast(OpenRouterProvider, self.model)
-
-        for _ in range(self.MAX_TOOL_ROUNDS):
-            data = model.chat(messages, tools=self.TOOL_SCHEMAS)
+        explicit_paths = self._explicit_repo_paths(user_input)
+        if explicit_paths:
+            evidence: list[dict[str, Any]] = []
+            for path in explicit_paths:
+                result = self._execute_tool("github_read_file", {"path": path})
+                tools_used.append("github_read_file")
+                evidence.append({"path": path, "evidence": result})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "AUTHORITATIVE REPOSITORY EVIDENCE:\n"
+                        + json.dumps(evidence, ensure_ascii=False)
+                        + "\n\nSYNTHESIZE NOW using only this evidence and the user request."
+                    ),
+                }
+            )
+            data = self.model.chat(messages, tools=None)
             choices = data.get("choices") or []
-            if not choices:
-                break
-
-            message = choices[0].get("message") or {}
-            tool_calls = message.get("tool_calls") or []
-            messages.append(message)
-
-            if not tool_calls:
-                content = str(message.get("content") or "").strip()
+            if choices:
+                content = str((choices[0].get("message") or {}).get("content") or "").strip()
                 if content:
                     return content, tools_used
-                break
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
 
-            for call in tool_calls:
-                fn = call.get("function") or {}
-                name = str(fn.get("name") or "")
-                raw_args = fn.get("arguments", "{}")
-                try:
-                    arguments = (
-                        json.loads(raw_args)
-                        if isinstance(raw_args, str)
-                        else raw_args
-                    )
-                except json.JSONDecodeError:
-                    arguments = {}
-                if not isinstance(arguments, dict):
-                    arguments = {}
+        data = self.model.chat(messages, tools=self.TOOL_SCHEMAS)
+        choices = data.get("choices") or []
+        if not choices:
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
+        message = choices[0].get("message") or {}
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content, tools_used
+            second = self.model.chat(messages, tools=None)
+            second_choices = second.get("choices") or []
+            if second_choices:
+                content = str((second_choices[0].get("message") or {}).get("content") or "").strip()
+                if content:
+                    return content, tools_used
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
 
-                result = self._execute_tool(name, arguments)
-                tools_used.append(name)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": str(call.get("id") or ""),
-                        "content": json.dumps(result, ensure_ascii=False),
-                    }
-                )
-
-        synthesis = messages + [
+        messages.append(message)
+        for call in tool_calls:
+            fn = call.get("function") or {}
+            name = str(fn.get("name") or "")
+            raw_args = fn.get("arguments", "{}")
+            try:
+                arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError:
+                arguments = {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            result = self._execute_tool(name, arguments)
+            tools_used.append(name)
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.get("id", ""),
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
+        messages.append(
             {
                 "role": "user",
-                "content": (
-                    "SYNTHESIZE NOW. Do not use tools. Produce the final "
-                    "response using only the evidence already collected. "
-                    "Follow the required <RESPONSE>, <LEARNING>, "
-                    "<CONFIDENCE> format."
-                ),
+                "content": "SYNTHESIZE NOW. Return the final structured response for the user.",
             }
-        ]
-        for _ in range(self.MAX_FINAL_RETRIES + 1):
-            try:
-                final_data = model.chat(synthesis, tools=None)
-            except Exception:
-                continue
-            final_choices = final_data.get("choices") or []
-            if final_choices:
-                raw = str(
-                    (final_choices[0].get("message") or {}).get("content")
-                    or ""
-                ).strip()
-                if raw:
-                    return raw, tools_used
-
-        return (
-            "<RESPONSE>"
-            "The model did not return a final synthesis after the available "
-            "evidence was collected."
-            "</RESPONSE><LEARNING>No new durable learning.</LEARNING>"
-            "<CONFIDENCE>0.2</CONFIDENCE>",
-            tools_used,
         )
+        final = self.model.chat(messages, tools=None)
+        final_choices = final.get("choices") or []
+        if final_choices:
+            content = str((final_choices[0].get("message") or {}).get("content") or "").strip()
+            if content:
+                return content, tools_used
+        return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
 
-    def run(self, user_input: str) -> AgentResult:
+    def run(
+        self,
+        user_input: str,
+        memory_context: str,
+        external_context: str = "",
+    ) -> AgentResult:
         self.workspace = CognitiveWorkspace(task=user_input)
-        self.workspace.semantic_frame = frame_from_text(user_input)
-        self.workspace.observations.append("User input grounded as traceable evidence")
-        self.workspace.transition("DUY")
         self.planner.create_plan(self.workspace)
-        self.workspace.transition("BAK")
-
-        # The deterministic decision loop is a mandatory preflight.  It does
-        # not replace model reasoning; it controls whether reasoning proceeds.
-        preflight = self.decision_loop.run(user_input, probability=0.7)
-        if preflight.status == "ABORTED":
-            response = preflight.output.get("reason", "Request blocked by ANNE safety gates.")
-            learning = "A request was blocked during deterministic preflight."
-            memory_path = self.memory.save(
-                redact_sensitive(user_input),
-                redact_sensitive(str(response)),
-                redact_sensitive(learning),
-                0.2,
-            )
-            review = self.metacognition.review(self.workspace, str(response))
-            return AgentResult(
-                str(response), learning, 0.2, memory_path, [], review.__dict__
-            )
-
-        self.workspace.transition("GÖR")
-        memory_context = self.memory.context(limit=8)
-        if isinstance(self.model, OpenRouterProvider):
-            raw, tools_used = self._openrouter_run(
-                user_input, memory_context
-            )
-        else:
-            raw = self.model.ask(
-                f"PERSISTENT MEMORY:\n{memory_context}\n\n"
-                f"CURRENT USER INPUT:\n{user_input}",
-                system_instruction=self.SYSTEM,
-            )
-            tools_used = []
-
-        self.workspace.transition("ANLA")
-        response = self._section(raw, "RESPONSE") or raw.strip()
-        structured = self._section(raw, "SEMANTIC_FRAME")
-        if structured:
-            try:
-                self.workspace.semantic_frame = parse_structured_frame(structured)
-                issues = self.ontology.validate(self.workspace.semantic_frame)
-                self.workspace.observations.append(
-                    f"Model semantic frame parsed; ontology issues={len(issues)}"
-                )
-            except (ValueError, TypeError):
-                self.workspace.observations.append(
-                    "Model semantic frame invalid; text grounding retained"
-                )
-        learning = (
-            self._section(raw, "LEARNING")
-            or "No new durable learning."
-        )
+        self.workspace.observations.append("Task received and bounded plan created")
+        response_text, tools_used = self._tool_run(user_input, memory_context, external_context)
+        response = self._section(response_text, "RESPONSE") or response_text
+        learning = self._section(response_text, "LEARNING") or "No new durable learning."
+        confidence_text = self._section(response_text, "CONFIDENCE")
         try:
-            confidence = float(self._section(raw, "CONFIDENCE"))
-        except ValueError:
+            confidence = max(0.0, min(1.0, float(confidence_text)))
+        except (ValueError, TypeError):
             confidence = 0.5
-        confidence = max(0.0, min(1.0, confidence))
-        self.workspace.uncertainty = 1.0 - confidence
-        self.workspace.transition("HİSSET")
-
-        # Verify the generated answer through the same deterministic gate.
-        verification = self.decision_loop.run(response, probability=confidence)
-        if verification.status == "ABORTED":
-            response = "ANNE could not safely validate the generated response."
-            learning = "The generated response failed post-generation validation."
-            confidence = min(confidence, 0.2)
-
-        self.workspace.transition("YAP")
+        semantic_text = self._section(response_text, "SEMANTIC_FRAME")
+        frame = frame_from_text(response)
+        semantic_valid = False
+        if semantic_text:
+            with contextlib.suppress(Exception):
+                frame = parse_structured_frame(semantic_text)
+                semantic_valid = True
         review = self.metacognition.review(self.workspace, response)
-        self.workspace.reasoning_audit = self.semantic_validator.audit(
-            conclusion=response,
-            evidence=self.workspace.semantic_frame.evidence,
-            assumptions=self.workspace.active_hypotheses,
-        ).__dict__
-        review_data = {**review.__dict__, "reasoning_audit": self.workspace.reasoning_audit}
-        self.workspace.transition("ÖĞREN")
-        memory_path = self.memory.save(
-            redact_sensitive(user_input),
-            redact_sensitive(response),
-            redact_sensitive(learning),
-            confidence,
-        )
+        review_dict = asdict(review)
+        review_dict["semantic_valid"] = semantic_valid
+        review_dict["semantic_frame_type"] = type(frame).__name__
+        review_dict["native_ai_kernel"] = self.ai_kernel.snapshot()
         return AgentResult(
-            response,
-            learning,
-            confidence,
-            memory_path,
-            tools_used,
-            review_data,
+            response=redact_sensitive(response),
+            learning=redact_sensitive(learning),
+            confidence=confidence,
+            memory_path=getattr(self.memory, "path", None),
+            tools_used=tools_used,
+            cognitive_review=review_dict,
         )

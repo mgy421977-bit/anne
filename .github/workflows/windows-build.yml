@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'desktop/anne_tinker.py'
+      - 'desktop/*.py'
       - 'desktop/build_exe_windows.bat'
+      - 'desktop/requirements.txt'
       - 'src/anne/**'
       - 'pyproject.toml'
       - '.github/workflows/windows-build.yml'
@@ -20,27 +21,91 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
 
       - name: Install dependencies
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r desktop/requirements.txt
-          python -m pip install pyinstaller
+          python -m pip uninstall -y llama-cpp-python
+          $env:CMAKE_ARGS = '-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_SSE42=ON'
+          $env:FORCE_CMAKE = '1'
+          python -m pip install --no-cache-dir --no-binary=llama-cpp-python llama-cpp-python==0.3.34
 
-      - name: Build EXE
-        run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Tinker desktop\anne_tinker.py
-
-      - name: Verify executable exists
+      - name: Verify llama.cpp CPU compatibility
         shell: pwsh
         run: |
-          if (-not (Test-Path 'dist\ANNE_Tinker.exe')) { throw 'ANNE_Tinker.exe was not created.' }
-          Get-Item 'dist\ANNE_Tinker.exe' | Format-List FullName,Length
+          python -c "import llama_cpp; print('llama_cpp import OK:', llama_cpp.__version__)"
 
-      - name: Upload Windows EXE
+      - name: Build standard EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Tinker desktop\anne_tinker.py
+
+      - name: Build Embedded AI EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Embedded_Tinker desktop\anne_embedded_tinker.py
+
+      - name: Build Cognitive Engine EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Cognitive_Tinker desktop\anne_cognitive_tinker.py
+
+      - name: Build Native Cognitive EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --name ANNE_Native_Cognitive_Tinker desktop\anne_native_cognitive_tinker.py
+
+      - name: Verify executables exist
+        shell: pwsh
+        run: |
+          foreach ($name in @('ANNE_Tinker.exe','ANNE_Embedded_Tinker.exe','ANNE_Cognitive_Tinker.exe','ANNE_Native_Cognitive_Tinker.exe')) {
+            if (-not (Test-Path "dist\$name")) { throw "$name was not created." }
+          }
+          Get-Item 'dist\ANNE_Tinker.exe', 'dist\ANNE_Embedded_Tinker.exe', 'dist\ANNE_Cognitive_Tinker.exe', 'dist\ANNE_Native_Cognitive_Tinker.exe' | Format-List FullName,Length
+
+      - name: Upload standard Windows EXE
         uses: actions/upload-artifact@v4
         with:
           name: ANNE_Tinker_Windows
           path: dist/ANNE_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload Embedded AI Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Embedded_Tinker_Windows
+          path: dist/ANNE_Embedded_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload Cognitive Engine Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Cognitive_Tinker_Windows
+          path: dist/ANNE_Cognitive_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload Native Cognitive Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Native_Cognitive_Tinker_Windows
+          path: dist/ANNE_Native_Cognitive_Tinker.exe
+          if-no-files-found: error
+
+      - name: Package full ANNE source
+        shell: pwsh
+        run: |
+          if (Test-Path 'anne_tinker_source') { Remove-Item 'anne_tinker_source' -Recurse -Force }
+          New-Item -ItemType Directory -Path 'anne_tinker_source' | Out-Null
+          Copy-Item 'desktop' 'anne_tinker_source\desktop' -Recurse
+          Copy-Item 'src' 'anne_tinker_source\src' -Recurse
+          Copy-Item 'pyproject.toml' 'anne_tinker_source\pyproject.toml'
+          Copy-Item 'requirements.txt' 'anne_tinker_source\requirements.txt'
+          Copy-Item 'README.md' 'anne_tinker_source\README.md'
+          Copy-Item 'governance' 'anne_tinker_source\governance' -Recurse
+          Compress-Archive -Path 'anne_tinker_source\*' -DestinationPath 'ANNE_Tinker_Full_Source.zip' -Force
+
+      - name: Upload full ANNE source
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Tinker_Full_Source
+          path: ANNE_Tinker_Full_Source.zip
           if-no-files-found: error
