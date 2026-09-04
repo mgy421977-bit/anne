@@ -7,7 +7,7 @@ import contextlib
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -247,34 +247,28 @@ omit only when no semantic extraction is useful.
         memory_context: str,
         external_context: str = "",
     ) -> AgentResult:
-        plan = self.planner.plan(user_input)
-        self.workspace = CognitiveWorkspace(task=user_input, plan=plan.steps)
-        self.workspace.record_input(user_input)
+        self.workspace = CognitiveWorkspace(task=user_input)
+        self.planner.create_plan(self.workspace)
+        self.workspace.observations.append("Task received and bounded plan created")
         response_text, tools_used = self._tool_run(user_input, memory_context, external_context)
         response = self._section(response_text, "RESPONSE") or response_text
         learning = self._section(response_text, "LEARNING") or "No new durable learning."
         semantic_text = self._section(response_text, "SEMANTIC_FRAME")
-        confidence_text = self._section(response_text, "CONFIDENCE")
-        try:
-            confidence = max(0.0, min(1.0, float(confidence_text)))
-        except ValueError:
-            confidence = 0.5
         frame = frame_from_text(response)
+        semantic_valid = False
         if semantic_text:
             with contextlib.suppress(Exception):
                 frame = parse_structured_frame(semantic_text)
-        audit = self.semantic_validator.validate(frame)
-        review = self.metacognition.review(response, confidence)
-        review["semantic_valid"] = audit.valid
-        if self.workspace is not None:
-            self.workspace.record_reasoning(response, confidence)
-            self.workspace.record_decision(review)
-            self.workspace.finalize()
+                semantic_valid = True
+        review = self.metacognition.review(self.workspace, response)
+        review_dict = asdict(review)
+        review_dict["semantic_valid"] = semantic_valid
+        review_dict["semantic_frame_type"] = type(frame).__name__
         return AgentResult(
             response=redact_sensitive(response),
             learning=redact_sensitive(learning),
             confidence=confidence,
-            memory_path=self.memory.path,
+            memory_path=getattr(self.memory, "path", None),
             tools_used=tools_used,
-            cognitive_review=review,
+            cognitive_review=review_dict,
         )
