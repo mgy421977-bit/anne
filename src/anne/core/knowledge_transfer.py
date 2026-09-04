@@ -1,9 +1,4 @@
-"""Hybrid teacher-to-ANNE knowledge transfer.
-
-ANNE keeps its own cognitive state while an optional teacher model can provide
-answers and examples. Transfer stores facts, reasoning patterns, rules and
-response-style patterns; model weights are never copied.
-"""
+"""Hybrid teacher-to-ANNE knowledge transfer."""
 
 from __future__ import annotations
 
@@ -12,6 +7,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
+
+from anne.core.data_paths import anne_knowledge_root
 
 
 @dataclass
@@ -28,10 +25,10 @@ class TransferPacket:
 
 
 class KnowledgeTransferEngine:
-    """Durable, deduplicated store for structured teacher knowledge."""
+    """Durable, deduplicated store for teacher knowledge and response patterns."""
 
     def __init__(self, root: str | Path | None = None) -> None:
-        self.root = Path(root or (Path.home() / ".anne" / "knowledge"))
+        self.root = Path(root) if root else anne_knowledge_root()
         self.root.mkdir(parents=True, exist_ok=True)
         self.path = self.root / "teacher_knowledge.jsonl"
 
@@ -104,8 +101,13 @@ class KnowledgeTransferEngine:
             terms = set(topic.lower().split())
             packets = sorted(
                 packets,
-                key=lambda packet: len(terms.intersection(set(packet.topic.lower().split()))) +
-                len(terms.intersection(set(" ".join(packet.facts + packet.patterns + packet.rules).lower().split()))),
+                key=lambda packet: (
+                    len(terms.intersection(set(packet.topic.lower().split())))
+                    + len(terms.intersection(set(
+                        " ".join(packet.facts + packet.patterns + packet.rules + packet.response_style)
+                        .lower().split()
+                    )))
+                ),
                 reverse=True,
             )
         lines: list[str] = []
