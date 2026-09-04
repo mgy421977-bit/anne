@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from anne.agent.github_memory import GitHubMemory
+from anne.core.ai_kernel import AnneAIKernel
 from anne.core.cognitive_runtime import CognitiveWorkspace, HierarchicalPlanner, Metacognition
 from anne.core.decision_loop import DecisionLoop
 from anne.multi_agent import AgentRole, CollaborationResult, MultiAgentCoordinator, Worker
@@ -34,7 +35,7 @@ class AgentResult:
 
 
 class AnneAgent:
-    """Coordinates reasoning models, safe tools, and persistent GitHub memory."""
+    """Coordinates ANNE's native AI kernel, models, safe tools, and memory."""
 
     MAX_TOOL_ROUNDS = 1
     MAX_FINAL_RETRIES = 0
@@ -42,6 +43,9 @@ class AnneAgent:
     SYSTEM = """You are ANNE (Adaptive Neural Nexus Engine), an experimental AI cognitive agent.
 You are not a claim of AGI or consciousness.
 Use DUY -> BAK -> GÖR -> ANLA -> HİSSET -> YAP as a reasoning discipline.
+ANNE has a native model-independent AI kernel. Treat its intent, concepts,
+plan, knowledge state, and confidence as the first-pass reasoning substrate.
+The language model is a language/reasoning assistant, not ANNE itself.
 Treat persistent memory as prior context, not unquestionable truth.
 Do not invent repository facts. Use tools when evidence is required.
 Use the minimum number of tools necessary.
@@ -74,6 +78,7 @@ omit only when no semantic extraction is useful.
     def __init__(self, model: Any, memory: Any, workspace: str | Path | None = None) -> None:
         self.model = model
         self.memory = memory
+        self.ai_kernel = AnneAIKernel()
         self.github_tools = (
             GitHubRepoTool(memory.token, memory.repository, memory.branch)
             if getattr(memory, "token", "")
@@ -174,17 +179,40 @@ omit only when no semantic extraction is useful.
             }
         )
 
+    def _native_kernel_context(self, user_input: str) -> tuple[str, float]:
+        result = self.ai_kernel.reason(user_input)
+        if self.workspace is not None:
+            self.workspace.active_hypotheses.extend(result.knowledge.hypotheses)
+            self.workspace.observations.append(
+                f"Native kernel intent={result.intent}; concepts={len(result.concepts)}; "
+                f"kernel_confidence={result.confidence:.2f}"
+            )
+            self.workspace.uncertainty = 1.0 - result.confidence
+        context = (
+            "===== ANNE NATIVE AI KERNEL =====\n"
+            f"INTENT: {result.intent}\n"
+            f"CONCEPTS: {json.dumps(result.concepts, ensure_ascii=False)}\n"
+            f"PLAN: {json.dumps(result.plan, ensure_ascii=False)}\n"
+            f"KNOWLEDGE: {json.dumps(result.knowledge.facts, ensure_ascii=False)}\n"
+            f"OPEN QUESTIONS: {json.dumps(result.knowledge.questions, ensure_ascii=False)}\n"
+            f"KERNEL CONFIDENCE: {result.confidence:.2f}\n"
+            "The kernel state is ANNE-owned reasoning state; do not overwrite it silently."
+        )
+        return context, result.confidence
+
     def _tool_run(
         self,
         user_input: str,
         memory_context: str,
         external_context: str = "",
     ) -> tuple[str, list[str]]:
+        kernel_context, _kernel_confidence = self._native_kernel_context(user_input)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.SYSTEM},
             {
                 "role": "user",
                 "content": (
+                    f"{kernel_context}\n\n"
                     f"PERSISTENT MEMORY:\n{memory_context}\n\n"
                     f"RESEARCH FILE CONTEXT:\n{external_context or '(none)'}\n\n"
                     f"CURRENT USER INPUT:\n{user_input}"
@@ -360,6 +388,7 @@ omit only when no semantic extraction is useful.
         review_dict = asdict(review)
         review_dict["semantic_valid"] = semantic_valid
         review_dict["semantic_frame_type"] = type(frame).__name__
+        review_dict["native_ai_kernel"] = self.ai_kernel.snapshot()
         return AgentResult(
             response=redact_sensitive(response),
             learning=redact_sensitive(learning),
