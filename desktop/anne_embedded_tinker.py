@@ -60,20 +60,27 @@ class EmbeddedAnneTinker(tk.Tk):
             header,
             text="Qwen2.5-0.5B-Instruct GGUF • llama.cpp in-process • Ollama yok",
         ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
-        self.model_status = ttk.Label(header, text="Checking model…")
-        self.model_status.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=4)
-        ttk.Button(header, text="Modeli İndir / Yenile", command=self.download_model).grid(
-            row=0, column=2, rowspan=2, padx=8, pady=6
+        self.model_status = ttk.Label(header, text="Model durumu kontrol ediliyor…")
+        self.model_status.grid(row=1, column=0, columnspan=2, sticky="w", padx=8, pady=(2, 2))
+        self.download_button = ttk.Button(
+            header, text="Modeli İndir / Yenile", command=self.download_model
         )
+        self.download_button.grid(row=0, column=2, rowspan=2, padx=8, pady=6)
+
+        self.progress = ttk.Progressbar(header, mode="determinate", maximum=100, length=360)
+        self.progress.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 2))
+        self.progress_label = ttk.Label(header, text="0 MB / bekleniyor")
+        self.progress_label.grid(row=3, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 5))
+
         options = ttk.Frame(header)
-        options.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(4, 8))
+        options.grid(row=2, column=2, rowspan=2, sticky="e", padx=8, pady=2)
         ttk.Checkbutton(
             options,
             text="İnternet araştırması (varsayılan kapalı)",
             variable=self.web_research,
-        ).pack(side="left")
+        ).pack(anchor="e")
         ttk.Label(options, text="CPU: 2 thread • context: 2048 • max output: 256").pack(
-            side="left", padx=20
+            anchor="e", pady=(4, 0)
         )
 
         research = ttk.LabelFrame(root, text="Araştırma Dosyaları")
@@ -112,28 +119,55 @@ class EmbeddedAnneTinker(tk.Tk):
         self.status = ttk.Label(root, text="Hazır", anchor="w")
         self.status.grid(row=4, column=0, sticky="ew", pady=(5, 0))
 
-    def _append(self, speaker: str, text: str) -> None:
-        self.chat.configure(state="normal")
-        self.chat.insert("end", f"\n{speaker}\n{text}\n")
-        self.chat.see("end")
-        self.chat.configure(state="disabled")
+    def _model_paths(self) -> tuple[Path, Path]:
+        target = EmbeddedAIProvider.default_model_path()
+        return target, target.with_suffix(target.suffix + ".part")
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        return f"{size / (1024 * 1024):.1f} MB"
 
     def refresh_status(self) -> None:
         provider = EmbeddedAIProvider()
+        _target, partial = self._model_paths()
         if provider.is_installed():
             size_mb = provider.model_path.stat().st_size / (1024 * 1024)
-            self.model_status.configure(text=f"Model hazır • {size_mb:.0f} MB • {provider.model_path}")
+            self.model_status.configure(text=f"Model hazır • {size_mb:.0f} MB")
+            self.progress.stop()
+            self.progress.configure(mode="determinate", value=100)
+            self.progress_label.configure(text=f"{size_mb:.1f} MB • tamamlandı")
+            self.download_button.configure(text="Modeli Yenile", state="normal")
+            return
+        if partial.exists() and partial.stat().st_size > 0:
+            self.model_status.configure(text="Kısmi model dosyası bulundu • indirme yeniden başlatılabilir")
+            self.progress.stop()
+            self.progress.configure(mode="determinate", value=0)
+            self.progress_label.configure(text=f"{self._format_size(partial.stat().st_size)} • kısmi")
         else:
-            self.model_status.configure(text="Model henüz indirilmedi • butondan veya ilk kullanımda indirilebilir")
+            self.model_status.configure(text="Model henüz indirilmedi")
+            self.progress.stop()
+            self.progress.configure(mode="determinate", value=0)
+            self.progress_label.configure(text="0 MB / bekleniyor")
+        self.download_button.configure(text="Modeli İndir / Yenile", state="normal")
+
+    def _queue_model_progress(self, received: int, total: int) -> None:
+        self.result_queue.put(("model_progress", (received, total)))
 
     def download_model(self) -> None:
+        if str(self.download_button.cget("state")) == "disabled":
+            return
+        self.download_button.configure(state="disabled", text="İndiriliyor…")
+        self.progress.stop()
+        self.progress.configure(mode="determinate", value=0)
+        self.progress_label.configure(text="0 MB / hazırlanıyor…")
+        self.model_status.configure(text="Model indiriliyor…")
+
         def worker() -> None:
             try:
-                self.result_queue.put(("status", "Embedded AI modeli indiriliyor…"))
-                EmbeddedAIProvider.download_default_model()
+                EmbeddedAIProvider.download_default_model(progress=self._queue_model_progress)
                 self.result_queue.put(("model", "Model download complete"))
             except Exception as exc:
-                self.result_queue.put(("error", str(exc)))
+                self.result_queue.put(("download_error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -264,9 +298,34 @@ class EmbeddedAnneTinker(tk.Tk):
                         "\n".join(f"{i}. {item['title']}\n{item['url']}" for i, item in enumerate(results, 1))
                         if results else "Sonuç bulunamadı.",
                     )
+                elif kind == "model_progress":
+                    received, total = payload
+                    received_mb = received / (1024 * 1024)
+                    if total > 0:
+                        total_mb = total / (1024 * 1024)
+                        percent = min(100.0, received * 100.0 / total)
+                        self.progress.stop()
+                        self.progress.configure(mode="determinate", value=percent)
+                        self.progress_label.configure(
+                            text=f"{received_mb:.1f} MB / {total_mb:.1f} MB  •  %{percent:.1f}"
+                        )
+                    else:
+                        self.progress.configure(mode="indeterminate")
+                        self.progress.start(10)
+                        self.progress_label.configure(text=f"{received_mb:.1f} MB indirildi…")
+                    self.model_status.configure(text="Model indiriliyor…")
                 elif kind == "model":
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate", value=100)
+                    self.download_button.configure(state="normal", text="Modeli Yenile")
                     self.refresh_status()
                     self.status.configure(text="Embedded AI modeli hazır.")
+                elif kind == "download_error":
+                    self.progress.stop()
+                    self.progress.configure(mode="determinate")
+                    self.refresh_status()
+                    self._append("HATA", f"Model indirme başarısız: {payload}")
+                    self.status.configure(text="Model indirme başarısız.")
                 elif kind == "status":
                     self.status.configure(text=str(payload))
                 else:
@@ -275,6 +334,12 @@ class EmbeddedAnneTinker(tk.Tk):
         except queue.Empty:
             pass
         self.after(100, self._poll_results)
+
+    def _append(self, speaker: str, text: str) -> None:
+        self.chat.configure(state="normal")
+        self.chat.insert("end", f"\n{speaker}\n{text}\n")
+        self.chat.see("end")
+        self.chat.configure(state="disabled")
 
 
 if __name__ == "__main__":
