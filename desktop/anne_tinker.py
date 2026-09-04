@@ -18,6 +18,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anne.agent.github_memory import GitHubMemory
+from anne.agent.local_memory import LocalMemory
 from anne.agent.runtime import AnneAgent
 
 DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
@@ -38,7 +39,6 @@ class AnneTinker(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ANNE AI — Windows Tinker")
-        # Keep the complete chat input visible on common 768px-tall Windows screens.
         self.geometry("1180x700")
         self.minsize(980, 600)
         self.result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -51,12 +51,10 @@ class AnneTinker(tk.Tk):
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=12)
         root.pack(fill="both", expand=True)
-
         config = ttk.LabelFrame(root, text="Connection")
         config.pack(fill="x", pady=(0, 10))
         for column in (1, 3):
             config.columnconfigure(column, weight=1)
-
         ttk.Label(config, text="Provider").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.provider = ttk.Combobox(
             config,
@@ -66,38 +64,29 @@ class AnneTinker(tk.Tk):
         )
         self.provider.grid(row=0, column=1, sticky="w", padx=8, pady=6)
         self.provider.bind("<<ComboboxSelected>>", lambda _event: self._update_provider_fields())
-
         self.key_label = ttk.Label(config, text="API key")
         self.key_label.grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.api_key = ttk.Entry(config, show="*", width=62)
         self.api_key.grid(row=1, column=1, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="Ollama URL").grid(row=2, column=0, sticky="w", padx=8, pady=6)
         self.base_url = ttk.Entry(config, width=42)
         self.base_url.grid(row=2, column=1, sticky="ew", padx=8, pady=6)
-
-        ttk.Label(config, text="GitHub token").grid(row=3, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(config, text="GitHub token (optional)").grid(row=3, column=0, sticky="w", padx=8, pady=6)
         self.github_token = ttk.Entry(config, show="*", width=62)
         self.github_token.grid(row=3, column=1, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="Repository").grid(row=0, column=2, sticky="w", padx=8, pady=6)
         self.repository = ttk.Entry(config, width=28)
         self.repository.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="Model").grid(row=1, column=2, sticky="w", padx=8, pady=6)
         self.model = ttk.Entry(config, width=34)
         self.model.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="Mode").grid(row=2, column=2, sticky="w", padx=8, pady=6)
         self.mode = ttk.Label(config, text="Pipeline-first cognitive runtime")
         self.mode.grid(row=2, column=3, sticky="w", padx=8, pady=6)
-
         self.connection_button = ttk.Button(config, text="Test connection", command=self.test_connection)
         self.connection_button.grid(row=3, column=2, sticky="w", padx=8, pady=6)
-
         self.status = ttk.Label(config, text="Ready", anchor="w")
         self.status.grid(row=4, column=0, columnspan=4, sticky="ew", padx=8, pady=(2, 8))
-
         research = ttk.LabelFrame(root, text="Research Files")
         research.pack(fill="x", pady=(0, 10))
         research.columnconfigure(0, weight=1)
@@ -112,24 +101,20 @@ class AnneTinker(tk.Tk):
             research,
             text="TXT / MD / code / JSON / CSV / PDF / DOCX  •  files are extracted locally and sent as research context",
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 8))
-
         chat_frame = ttk.LabelFrame(root, text="ANNE")
         chat_frame.pack(fill="both", expand=True, pady=(0, 10))
         self.chat = scrolledtext.ScrolledText(chat_frame, wrap="word", font=("Segoe UI", 10))
         self.chat.pack(fill="both", expand=True, padx=8, pady=8)
         self.chat.configure(state="disabled")
-
         input_frame = ttk.Frame(root)
         input_frame.pack(fill="x")
         self.input_box = tk.Text(input_frame, height=4, wrap="word", font=("Segoe UI", 10))
         self.input_box.pack(side="left", fill="both", expand=True)
         self.input_box.bind("<Control-Return>", lambda _event: self.send())
-
         button_frame = ttk.Frame(input_frame)
         button_frame.pack(side="right", fill="y", padx=(8, 0))
         ttk.Button(button_frame, text="Send", command=self.send).pack(fill="x", pady=(0, 5))
         ttk.Button(button_frame, text="Clear", command=self._clear_input).pack(fill="x")
-
         ttk.Label(
             root,
             text="Ctrl+Enter = Send | Attach an ATHENA/research file and ask ANNE to test assumptions, contradictions, uncertainty and missed alternatives.",
@@ -220,7 +205,6 @@ class AnneTinker(tk.Tk):
     @staticmethod
     def _extract_pdf(path: Path) -> str:
         from pypdf import PdfReader
-
         reader = PdfReader(str(path))
         pages: list[str] = []
         for page in reader.pages:
@@ -272,8 +256,6 @@ class AnneTinker(tk.Tk):
         repository = self.repository.get().strip()
         if provider != "Ollama Local" and not api_key:
             raise ValueError(f"Enter the {provider} API key.")
-        if not github_token:
-            raise ValueError("Enter a GitHub token with Contents permission so ANNE can use its durable memory.")
         if not model:
             raise ValueError("Enter a model name.")
         if provider == "Ollama Local" and not base_url:
@@ -322,7 +304,10 @@ class AnneTinker(tk.Tk):
             else:
                 from anne.providers.openrouter import OpenRouterProvider
                 provider = OpenRouterProvider(api_key=api_key, model=model)
-            memory = GitHubMemory(token=github_token, repository=repository)
+            if github_token:
+                memory = GitHubMemory(token=github_token, repository=repository)
+            else:
+                memory = LocalMemory()
             agent = AnneAgent(provider, memory, workspace=ROOT)
             result = agent.run(user_input, external_context=external_context)
             self.result_queue.put(("ok", result))
