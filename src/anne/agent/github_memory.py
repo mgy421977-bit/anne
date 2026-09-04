@@ -25,6 +25,11 @@ class GitHubMemory:
         self.repository = repository
         self.branch = branch
         self.base_url = f"https://api.github.com/repos/{repository}"
+        self._last_user_input = ""
+
+    @property
+    def path(self) -> str:
+        return f"github://{self.repository}/{self.branch}/memory"
 
     def _request(self, path: str) -> Any:
         request = urllib.request.Request(
@@ -41,9 +46,7 @@ class GitHubMemory:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"GitHub API error {exc.code}: {body[:300]}"
-            ) from exc
+            raise RuntimeError(f"GitHub API error {exc.code}: {body[:300]}") from exc
 
     def recent(self, limit: int = 8) -> list[dict[str, Any]]:
         """Return the newest memory entries by filename."""
@@ -57,16 +60,13 @@ class GitHubMemory:
         files = [
             item
             for item in items
-            if item.get("type") == "file"
-            and item["name"].endswith(".json")
+            if item.get("type") == "file" and item["name"].endswith(".json")
         ]
         files.sort(key=lambda item: item["name"], reverse=True)
 
         memories: list[dict[str, Any]] = []
         for item in files[:limit]:
-            data = self._request(
-                f"/contents/{item['path']}?ref={self.branch}"
-            )
+            data = self._request(f"/contents/{item['path']}?ref={self.branch}")
             import base64
 
             raw = base64.b64decode(data["content"]).decode("utf-8")
@@ -87,6 +87,13 @@ class GitHubMemory:
                 f"RESPONSE: {memory.get('response', '')}"
             )
         return "\n\n---\n\n".join(lines)
+
+    def load_context(self, limit: int = 8) -> str:
+        """Compatibility method matching the local memory interface."""
+        return self.context(limit)
+
+    def remember(self, user_input: str) -> None:
+        self._last_user_input = user_input
 
     def save(
         self,
@@ -109,9 +116,7 @@ class GitHubMemory:
             "confidence": max(0.0, min(1.0, float(confidence))),
         }
         content = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-        encoded = __import__("base64").b64encode(
-            content.encode("utf-8")
-        ).decode("ascii")
+        encoded = __import__("base64").b64encode(content.encode("utf-8")).decode("ascii")
         body = json.dumps(
             {
                 "message": "memory: record ANNE learning",
@@ -136,7 +141,19 @@ class GitHubMemory:
                 result = json.loads(response_obj.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"GitHub memory write failed {exc.code}: {error[:300]}"
-            ) from exc
+            raise RuntimeError(f"GitHub memory write failed {exc.code}: {error[:300]}") from exc
         return str(result.get("content", {}).get("path", path))
+
+    def save_learning(
+        self,
+        learning: str,
+        response: str = "",
+        confidence: float = 0.5,
+    ) -> str:
+        """Persist a learning item using the most recent Tinker input."""
+        return self.save(
+            user_input=self._last_user_input,
+            response=response,
+            learning=learning,
+            confidence=confidence,
+        )
