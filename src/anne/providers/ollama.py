@@ -28,9 +28,13 @@ class OllamaProvider(OpenRouterProvider):
         model: str | None = None,
         timeout: int = 180,
     ) -> None:
-        raw_base = base_url or os.getenv("ANNE_OLLAMA_BASE_URL", self.DEFAULT_BASE_URL)
+        raw_base = (
+            base_url
+            or os.getenv("ANNE_OLLAMA_BASE_URL")
+            or self.DEFAULT_BASE_URL
+        )
         self.base_url = raw_base.rstrip("/")
-        self.model = model or os.getenv("ANNE_OLLAMA_MODEL", self.DEFAULT_MODEL)
+        self.model = model or os.getenv("ANNE_OLLAMA_MODEL") or self.DEFAULT_MODEL
         env_timeout = os.getenv("ANNE_OLLAMA_TIMEOUT")
         self.timeout = int(env_timeout) if env_timeout else timeout
         self.api_key = "ollama-local"
@@ -47,7 +51,7 @@ class OllamaProvider(OpenRouterProvider):
         )
         try:
             with urllib.request.urlopen(request, timeout=min(self.timeout, 10)) as response:
-                return 200 <= response.status < 300
+                return bool(200 <= response.status < 300)
         except (urllib.error.URLError, TimeoutError, OSError):
             return False
 
