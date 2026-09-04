@@ -71,7 +71,7 @@ omit only when no semantic extraction is useful.
         {"type": "function", "function": {"name": "local_read", "description": "Read a UTF-8 file in the local ANNE Windows workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
     ]
 
-    def __init__(self, model: Any, memory: GitHubMemory, workspace: str | Path | None = None) -> None:
+    def __init__(self, model: Any, memory: Any, workspace: str | Path | None = None) -> None:
         self.model = model
         self.memory = memory
         self.github_tools = (
@@ -254,6 +254,11 @@ omit only when no semantic extraction is useful.
         response = self._section(response_text, "RESPONSE") or response_text
         learning = self._section(response_text, "LEARNING") or "No new durable learning."
         semantic_text = self._section(response_text, "SEMANTIC_FRAME")
+        confidence_text = self._section(response_text, "CONFIDENCE")
+        try:
+            confidence = max(0.0, min(1.0, float(confidence_text)))
+        except ValueError:
+            confidence = 0.5
         frame = frame_from_text(response)
         semantic_valid = False
         if semantic_text:
