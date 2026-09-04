@@ -28,9 +28,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r desktop/requirements.txt
-          # The published CPU wheel can contain AVX2/FMA instructions that
-          # older CPUs cannot execute. Rebuild llama-cpp-python for ANNE's
-          # Ivy Bridge-era compatibility profile: AVX only, no AVX2/FMA/F16C/BMI2.
           python -m pip uninstall -y llama-cpp-python
           $env:CMAKE_ARGS = '-DGGML_NATIVE=OFF -DGGML_AVX=ON -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF -DGGML_SSE42=ON'
           $env:FORCE_CMAKE = '1'
@@ -49,12 +46,17 @@ jobs:
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Embedded_Tinker desktop\anne_embedded_tinker.py
 
+      - name: Build Cognitive Engine EXE
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --paths "$env:GITHUB_WORKSPACE\src" --collect-all google.genai --collect-all llama_cpp --name ANNE_Cognitive_Tinker desktop\anne_cognitive_tinker.py
+
       - name: Verify executables exist
         shell: pwsh
         run: |
-          if (-not (Test-Path 'dist\ANNE_Tinker.exe')) { throw 'ANNE_Tinker.exe was not created.' }
-          if (-not (Test-Path 'dist\ANNE_Embedded_Tinker.exe')) { throw 'ANNE_Embedded_Tinker.exe was not created.' }
-          Get-Item 'dist\ANNE_Tinker.exe', 'dist\ANNE_Embedded_Tinker.exe' | Format-List FullName,Length
+          foreach ($name in @('ANNE_Tinker.exe','ANNE_Embedded_Tinker.exe','ANNE_Cognitive_Tinker.exe')) {
+            if (-not (Test-Path "dist\$name")) { throw "$name was not created." }
+          }
+          Get-Item 'dist\ANNE_Tinker.exe', 'dist\ANNE_Embedded_Tinker.exe', 'dist\ANNE_Cognitive_Tinker.exe' | Format-List FullName,Length
 
       - name: Upload standard Windows EXE
         uses: actions/upload-artifact@v4
@@ -68,6 +70,13 @@ jobs:
         with:
           name: ANNE_Embedded_Tinker_Windows
           path: dist/ANNE_Embedded_Tinker.exe
+          if-no-files-found: error
+
+      - name: Upload Cognitive Engine Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANNE_Cognitive_Tinker_Windows
+          path: dist/ANNE_Cognitive_Tinker.exe
           if-no-files-found: error
 
       - name: Package full ANNE source
