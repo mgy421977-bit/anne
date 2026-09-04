@@ -18,6 +18,11 @@ class LocalMemory:
     def __init__(self, root: str | Path | None = None) -> None:
         self.root = Path(root or Path.home() / ".anne" / "memory")
         self.root.mkdir(parents=True, exist_ok=True)
+        self._last_user_input = ""
+
+    @property
+    def path(self) -> str:
+        return str(self.root)
 
     def _files(self) -> list[Path]:
         return sorted(self.root.glob("*.json"), reverse=True)
@@ -41,6 +46,10 @@ class LocalMemory:
             f"RESPONSE: {m.get('response', '')}"
             for m in memories
         )
+
+    def load_context(self, limit: int = 8) -> str:
+        """Compatibility method matching the durable memory interface."""
+        return self.context(limit)
 
     def save(
         self,
@@ -66,3 +75,15 @@ class LocalMemory:
             encoding="utf-8",
         )
         return str(path)
+
+    def remember(self, user_input: str) -> None:
+        self._last_user_input = user_input
+
+    def save_learning(self, learning: str, response: str = "", confidence: float = 0.5) -> str:
+        """Persist a learning item using the most recent Tinker input when available."""
+        return self.save(
+            user_input=self._last_user_input,
+            response=response,
+            learning=learning,
+            confidence=confidence,
+        )
