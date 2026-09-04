@@ -1,4 +1,4 @@
-"""ANNE Windows Tinker — local/cloud models plus research-file attachments."""
+"""ANNE Windows Tinker — local/cloud models, web research, and research files."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
 from anne.agent.github_memory import GitHubMemory
 from anne.agent.local_memory import LocalMemory
 from anne.agent.runtime import AnneAgent
+from anne.tools.web_research import WebResearchClient
 
 DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
@@ -47,6 +48,7 @@ class AnneTinker(tk.Tk):
             pass
         self.result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.attachments: list[Path] = []
+        self.web_research = tk.BooleanVar(value=True)
         self._build_ui()
         self._load_env_defaults()
         self._update_provider_fields()
@@ -57,10 +59,12 @@ class AnneTinker(tk.Tk):
         root.pack(fill="both", expand=True)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(2, weight=1)
+
         config = ttk.LabelFrame(root, text="Connection")
         config.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         for column in (1, 3):
             config.columnconfigure(column, weight=1)
+
         ttk.Label(config, text="Provider").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.provider = ttk.Combobox(
             config,
@@ -70,16 +74,20 @@ class AnneTinker(tk.Tk):
         )
         self.provider.grid(row=0, column=1, sticky="w", padx=8, pady=6)
         self.provider.bind("<<ComboboxSelected>>", lambda _event: self._update_provider_fields())
-        self.key_label = ttk.Label(config, text="API key")
+
+        self.key_label = ttk.Label(config, text="API key (not required)")
         self.key_label.grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.api_key = ttk.Entry(config, show="*", width=62)
         self.api_key.grid(row=1, column=1, sticky="ew", padx=8, pady=6)
+
         ttk.Label(config, text="Ollama URL").grid(row=2, column=0, sticky="w", padx=8, pady=6)
         self.base_url = ttk.Entry(config, width=42)
         self.base_url.grid(row=2, column=1, sticky="ew", padx=8, pady=6)
+
         ttk.Label(config, text="GitHub token (optional)").grid(row=3, column=0, sticky="w", padx=8, pady=6)
         self.github_token = ttk.Entry(config, show="*", width=62)
         self.github_token.grid(row=3, column=1, sticky="ew", padx=8, pady=6)
+
         ttk.Label(config, text="Repository").grid(row=0, column=2, sticky="w", padx=8, pady=6)
         self.repository = ttk.Entry(config, width=28)
         self.repository.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
@@ -87,12 +95,18 @@ class AnneTinker(tk.Tk):
         self.model = ttk.Entry(config, width=34)
         self.model.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
         ttk.Label(config, text="Mode").grid(row=2, column=2, sticky="w", padx=8, pady=6)
-        self.mode = ttk.Label(config, text="Pipeline-first cognitive runtime")
+        self.mode = ttk.Label(config, text="Local model + ANNE cognitive runtime")
         self.mode.grid(row=2, column=3, sticky="w", padx=8, pady=6)
         self.connection_button = ttk.Button(config, text="Test connection", command=self.test_connection)
         self.connection_button.grid(row=3, column=2, sticky="w", padx=8, pady=6)
         self.status = ttk.Label(config, text="Ready", anchor="w")
-        self.status.grid(row=4, column=0, columnspan=4, sticky="ew", padx=8, pady=(2, 8))
+        self.status.grid(row=4, column=0, columnspan=4, sticky="ew", padx=8, pady=(2, 4))
+        ttk.Checkbutton(
+            config,
+            text="Internet research (live web evidence)",
+            variable=self.web_research,
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=8, pady=(2, 8))
+
         research = ttk.LabelFrame(root, text="Research Files")
         research.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         research.columnconfigure(0, weight=1)
@@ -105,8 +119,9 @@ class AnneTinker(tk.Tk):
         ttk.Button(button_col, text="Clear files", command=self.clear_files).pack(fill="x", pady=5)
         ttk.Label(
             research,
-            text="TXT / MD / code / JSON / CSV / PDF / DOCX  •  files are extracted locally and sent as research context",
+            text="TXT / MD / code / JSON / CSV / PDF / DOCX  •  PDF/DOCX text is extracted locally as research evidence",
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 8))
+
         chat_frame = ttk.LabelFrame(root, text="ANNE")
         chat_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
         chat_frame.columnconfigure(0, weight=1)
@@ -114,6 +129,7 @@ class AnneTinker(tk.Tk):
         self.chat = scrolledtext.ScrolledText(chat_frame, wrap="word", font=("Segoe UI", 10))
         self.chat.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
         self.chat.configure(state="disabled")
+
         input_frame = ttk.Frame(root)
         input_frame.grid(row=3, column=0, sticky="ew")
         input_frame.columnconfigure(0, weight=1)
@@ -126,7 +142,7 @@ class AnneTinker(tk.Tk):
         ttk.Button(button_frame, text="Clear", command=self._clear_input).pack(fill="x")
         ttk.Label(
             root,
-            text="Ctrl+Enter = Send | Attach an ATHENA/research file and ask ANNE to test assumptions, contradictions, uncertainty and missed alternatives.",
+            text="Ctrl+Enter = Send | Web Research reads current public sources; attached files remain local evidence.",
         ).grid(row=4, column=0, sticky="w", pady=(5, 0))
 
     def _load_env_defaults(self) -> None:
@@ -204,8 +220,9 @@ class AnneTinker(tk.Tk):
             xml = archive.read("word/document.xml")
         root = ElementTree.fromstring(xml)
         paragraphs: list[str] = []
-        for paragraph in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
-            words = [node.text or "" for node in paragraph.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")]
+        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+        for paragraph in root.iter(f"{ns}p"):
+            words = [node.text or "" for node in paragraph.iter(f"{ns}t")]
             line = "".join(words).strip()
             if line:
                 paragraphs.append(line)
@@ -236,8 +253,6 @@ class AnneTinker(tk.Tk):
         return path.read_text(encoding="utf-8", errors="replace")
 
     def _build_research_context(self) -> tuple[str, list[str]]:
-        if not self.attachments:
-            return "", []
         parts: list[str] = []
         used: list[str] = []
         remaining = MAX_CONTEXT_CHARS
@@ -245,8 +260,7 @@ class AnneTinker(tk.Tk):
             text = self._read_attachment(path).strip()
             if not text:
                 continue
-            header = f"===== RESEARCH FILE: {path.name} =====\n"
-            chunk = header + text
+            chunk = f"===== RESEARCH FILE: {path.name} =====\n{text}"
             if len(chunk) > remaining:
                 chunk = chunk[:remaining] + "\n[TRUNCATED BY ANNE TINKER CONTEXT LIMIT]"
             parts.append(chunk)
@@ -288,7 +302,7 @@ class AnneTinker(tk.Tk):
         self.status.configure(text=f"ANNE is reasoning with {provider}…")
         threading.Thread(
             target=self._worker,
-            args=(user_input, external_context, api_key, github_token, repository, model, base_url, provider),
+            args=(user_input, external_context, api_key, github_token, repository, model, base_url, provider, self.web_research.get()),
             daemon=True,
         ).start()
 
@@ -302,8 +316,17 @@ class AnneTinker(tk.Tk):
         model: str,
         base_url: str,
         provider_name: str,
+        web_enabled: bool,
     ) -> None:
         try:
+            if web_enabled:
+                self.result_queue.put(("status", "Internet research: searching public web sources…"))
+                try:
+                    results = WebResearchClient().search(user_input, max_results=6)
+                    external_context = WebResearchClient.format_results(results) + "\n\n" + external_context
+                    self.result_queue.put(("web", results))
+                except Exception as exc:
+                    external_context = external_context + f"\n\n===== WEB RESEARCH ERROR =====\n{exc}"
             if provider_name == "Ollama Local":
                 from anne.providers.ollama import OllamaProvider
                 provider = OllamaProvider(base_url=base_url, model=model)
@@ -313,21 +336,12 @@ class AnneTinker(tk.Tk):
             else:
                 from anne.providers.openrouter import OpenRouterProvider
                 provider = OpenRouterProvider(api_key=api_key, model=model)
-            memory = GitHubMemory(
-                github_token,
-                repository or "mgy421977-bit/anne",
-                branch="main",
-            ) if github_token else LocalMemory()
+            memory = GitHubMemory(github_token, repository or "mgy421977-bit/anne", branch="main") if github_token else LocalMemory()
             if hasattr(memory, "remember"):
                 memory.remember(user_input)
             agent = AnneAgent(provider, memory, workspace=str(Path.home() / ".anne" / "workspace"))
-            context = external_context
-            result = agent.run(user_input, memory_context=memory.load_context(), external_context=context)
-            memory.save_learning(
-                result.learning,
-                response=result.response,
-                confidence=result.confidence,
-            )
+            result = agent.run(user_input, memory_context=memory.load_context(), external_context=external_context)
+            memory.save_learning(result.learning, response=result.response, confidence=result.confidence)
             self.result_queue.put(("response", result))
         except Exception as exc:
             self.result_queue.put(("error", str(exc)))
@@ -340,6 +354,14 @@ class AnneTinker(tk.Tk):
                     result = payload
                     self._append("ANNE", result.response)
                     self.status.configure(text=f"Done • confidence {result.confidence:.2f} • tools: {', '.join(result.tools_used) or 'none'}")
+                elif kind == "web":
+                    results = payload
+                    if results:
+                        self._append("WEB RESEARCH", "\n".join(f"{i}. {item['title']}\n{item['url']}" for i, item in enumerate(results, 1)))
+                    else:
+                        self._append("WEB RESEARCH", "No public web results returned.")
+                elif kind == "status":
+                    self.status.configure(text=str(payload))
                 else:
                     self._append("ERROR", str(payload))
                     self.status.configure(text="Error")
@@ -352,8 +374,7 @@ class AnneTinker(tk.Tk):
             provider, model, api_key, base_url, _github_token, _repository = self._validate_send()
             if provider == "Ollama Local":
                 from anne.providers.ollama import OllamaProvider
-                client = OllamaProvider(base_url=base_url, model=model)
-                ok = client.ping()
+                ok = OllamaProvider(base_url=base_url, model=model).ping()
             elif provider == "Gemini":
                 from anne.providers.gemini import GeminiProvider
                 GeminiProvider(api_key=api_key, model=model)
