@@ -126,6 +126,21 @@ grounding extractor is intentionally conservative and deterministic; it is a
 stable contract for a future neural parser, not a claim of human-level semantic
 understanding.
 
+### Offline local runtime
+
+ANNE can run without external API keys through `LocalProvider` and `LocalMemory`.
+Ollama is the default backend (`http://127.0.0.1:11434`); llama.cpp and LM
+Studio can be used through an OpenAI-compatible local endpoint. The offline
+factory stores interactions in SQLite and exposes only local-file tools.
+
+```python
+from anne.agent.offline import create_offline_agent
+
+agent = create_offline_agent(model="qwen2.5:7b", db_path="anne_offline.db")
+result = agent.run("Summarize the local workspace safely.")
+print(result.response)
+```
+
 ### Multi-agent collaboration
 
 ANNE includes a bounded specialist coordinator with researcher, critic, and

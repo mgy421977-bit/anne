@@ -16,6 +16,7 @@ from anne.core.cognitive_runtime import (
     Metacognition,
 )
 from anne.core.decision_loop import DecisionLoop
+from anne.memory.local_memory import LocalMemory
 from anne.multi_agent import (
     AgentRole,
     CollaborationResult,
@@ -24,6 +25,7 @@ from anne.multi_agent import (
 )
 from anne.neuro_symbolic.audit import NeuroSymbolicValidator
 from anne.providers.gemini import GeminiProvider
+from anne.providers.local import LocalProvider
 from anne.providers.openrouter import OpenRouterProvider
 from anne.safety.policy import ToolPolicy, redact_sensitive
 from anne.semantics.core import frame_from_text
@@ -143,15 +145,12 @@ omit only when no semantic extraction is useful.
 
     def __init__(
         self,
-        model: GeminiProvider | OpenRouterProvider,
-        memory: GitHubMemory,
+        model: GeminiProvider | OpenRouterProvider | LocalProvider,
+        memory: GitHubMemory | LocalMemory,
         workspace: str | Path | None = None,
     ) -> None:
         self.model = model
         self.memory = memory
-        self.github_tools = GitHubRepoTool(
-            memory.token, memory.repository, memory.branch
-        )
         self.local_tools = LocalFilesTool(workspace or Path.cwd())
         self.planner = HierarchicalPlanner()
         self.metacognition = Metacognition()
@@ -169,12 +168,20 @@ omit only when no semantic extraction is useful.
         self.decision_loop = DecisionLoop()
         self.workspace: CognitiveWorkspace | None = None
         self.tools: dict[str, Callable[..., Any]] = {
-            "github_read_file": self.github_tools.read_file,
-            "github_list": self.github_tools.list_directory,
-            "github_search": self.github_tools.search_code,
             "local_list": self.local_tools.list,
             "local_read": self.local_tools.read,
         }
+        if isinstance(memory, GitHubMemory):
+            self.github_tools = GitHubRepoTool(
+                memory.token, memory.repository, memory.branch
+            )
+            self.tools.update(
+                {
+                    "github_read_file": self.github_tools.read_file,
+                    "github_list": self.github_tools.list_directory,
+                    "github_search": self.github_tools.search_code,
+                }
+            )
 
     def collaborate(self, task: str, workers: dict[str, Worker]) -> CollaborationResult:
         """Run bounded specialist collaboration without erasing dissent."""
