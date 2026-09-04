@@ -241,6 +241,97 @@ omit only when no semantic extraction is useful.
                 return content, tools_used
         return "<RESPONSE>No response generated.</RESPONSE>\n<LEARNING>No new durable learning.</LEARNING>\n<CONFIDENCE>0</CONFIDENCE>", tools_used
 
+    def _openrouter_run(
+        self,
+        user_input: str,
+        memory_context: str,
+    ) -> tuple[str, list[str]]:
+        """Compatibility path retained for the historical OpenRouter runtime tests."""
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.SYSTEM},
+            {
+                "role": "user",
+                "content": f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}",
+            },
+        ]
+        tools_used: list[str] = []
+        explicit_paths = self._explicit_repo_paths(user_input)
+        if explicit_paths:
+            evidence: list[dict[str, Any]] = []
+            for path in explicit_paths:
+                result = self._execute_tool("github_read_file", {"path": path})
+                tools_used.append("github_read_file")
+                evidence.append({"path": path, "evidence": result})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "AUTHORITATIVE REPOSITORY EVIDENCE:\n"
+                        + json.dumps(evidence, ensure_ascii=False)
+                        + "\n\nSYNTHESIZE NOW using only this evidence and the user request."
+                    ),
+                }
+            )
+            data = self.model.chat(messages, tools=None)
+            choices = data.get("choices") or []
+            if choices:
+                content = str((choices[0].get("message") or {}).get("content") or "").strip()
+                if content:
+                    return content, tools_used
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
+
+        data = self.model.chat(messages, tools=self.TOOL_SCHEMAS)
+        choices = data.get("choices") or []
+        if not choices:
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
+        message = choices[0].get("message") or {}
+        tool_calls = message.get("tool_calls") or []
+        if not tool_calls:
+            content = str(message.get("content") or "").strip()
+            if content:
+                return content, tools_used
+            second = self.model.chat(messages, tools=None)
+            second_choices = second.get("choices") or []
+            if second_choices:
+                content = str((second_choices[0].get("message") or {}).get("content") or "").strip()
+                if content:
+                    return content, tools_used
+            return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
+
+        messages.append(message)
+        for call in tool_calls:
+            fn = call.get("function") or {}
+            name = str(fn.get("name") or "")
+            raw_args = fn.get("arguments", "{}")
+            try:
+                arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            except json.JSONDecodeError:
+                arguments = {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            result = self._execute_tool(name, arguments)
+            tools_used.append(name)
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.get("id", ""),
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
+        messages.append(
+            {
+                "role": "user",
+                "content": "SYNTHESIZE NOW. Return the final structured response for the user.",
+            }
+        )
+        final = self.model.chat(messages, tools=None)
+        final_choices = final.get("choices") or []
+        if final_choices:
+            content = str((final_choices[0].get("message") or {}).get("content") or "").strip()
+            if content:
+                return content, tools_used
+        return "<RESPONSE>Model did not return a final synthesis.</RESPONSE>", tools_used
+
     def run(
         self,
         user_input: str,
@@ -253,12 +344,12 @@ omit only when no semantic extraction is useful.
         response_text, tools_used = self._tool_run(user_input, memory_context, external_context)
         response = self._section(response_text, "RESPONSE") or response_text
         learning = self._section(response_text, "LEARNING") or "No new durable learning."
-        semantic_text = self._section(response_text, "SEMANTIC_FRAME")
         confidence_text = self._section(response_text, "CONFIDENCE")
         try:
             confidence = max(0.0, min(1.0, float(confidence_text)))
-        except ValueError:
+        except (ValueError, TypeError):
             confidence = 0.5
+        semantic_text = self._section(response_text, "SEMANTIC_FRAME")
         frame = frame_from_text(response)
         semantic_valid = False
         if semantic_text:
