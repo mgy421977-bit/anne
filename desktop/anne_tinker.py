@@ -39,8 +39,12 @@ class AnneTinker(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ANNE AI — Windows Tinker")
-        self.geometry("1180x700")
-        self.minsize(980, 600)
+        self.geometry("1280x820")
+        self.minsize(1100, 700)
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            pass
         self.result_queue: queue.Queue[tuple[str, object]] = queue.Queue()
         self.attachments: list[Path] = []
         self._build_ui()
@@ -304,64 +308,54 @@ class AnneTinker(tk.Tk):
             else:
                 from anne.providers.openrouter import OpenRouterProvider
                 provider = OpenRouterProvider(api_key=api_key, model=model)
-            if github_token:
-                memory = GitHubMemory(token=github_token, repository=repository)
-            else:
-                memory = LocalMemory()
-            agent = AnneAgent(provider, memory, workspace=ROOT)
-            result = agent.run(user_input, external_context=external_context)
-            self.result_queue.put(("ok", result))
+            memory = GitHubMemory(
+                github_token,
+                repository or "mgy421977-bit/anne",
+                branch="main",
+            ) if github_token else LocalMemory()
+            agent = AnneAgent(provider, memory, workspace=str(Path.home() / ".anne" / "workspace"))
+            context = external_context
+            result = agent.run(user_input, memory_context=memory.load_context(), external_context=context)
+            memory.save_learning(result.learning)
+            self.result_queue.put(("response", result))
         except Exception as exc:
             self.result_queue.put(("error", str(exc)))
-
-    def test_connection(self) -> None:
-        provider_name = self.provider.get()
-        model = self.model.get().strip()
-        base_url = self.base_url.get().strip()
-        api_key = self.api_key.get().strip()
-        try:
-            if provider_name == "Ollama Local":
-                from anne.providers.ollama import OllamaProvider
-                provider = OllamaProvider(base_url=base_url, model=model)
-                if not provider.ping():
-                    raise RuntimeError("Ollama is not reachable. Start Ollama and confirm the base URL.")
-                self.status.configure(text=f"Ollama OK — {model}")
-            elif provider_name == "Gemini":
-                from anne.providers.gemini import GeminiProvider
-                provider = GeminiProvider(api_key=api_key, model=model)
-                reply = provider.ask("Reply with exactly: ANNE TEST OK")
-                self.status.configure(text=f"Gemini OK — {reply.strip()[:60]}")
-            else:
-                from anne.providers.openrouter import OpenRouterProvider
-                provider = OpenRouterProvider(api_key=api_key, model=model)
-                data = provider.chat([{"role": "user", "content": "Reply with exactly: ANNE TEST OK"}])
-                reply = str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
-                self.status.configure(text=f"OpenRouter OK — {reply.strip()[:60]}")
-        except Exception as exc:
-            self.status.configure(text="Connection test failed.")
-            messagebox.showerror("ANNE connection test", str(exc))
 
     def _poll_results(self) -> None:
         try:
             while True:
                 kind, payload = self.result_queue.get_nowait()
-                if kind == "ok":
+                if kind == "response":
                     result = payload
-                    tools = ", ".join(result.tools_used) if result.tools_used else "none"
-                    self._append(
-                        "ANNE",
-                        f"{result.response}\n\n"
-                        f"[Tools: {tools}]\n"
-                        f"[Learning saved: {result.memory_path} | confidence={result.confidence:.2f}]",
-                    )
-                    self.status.configure(text="Ready — response, cognition review and memory completed.")
+                    self._append("ANNE", result.response)
+                    self.status.configure(text=f"Done • confidence {result.confidence:.2f} • tools: {', '.join(result.tools_used) or 'none'}")
                 else:
-                    self._append("SYSTEM ERROR", str(payload))
-                    self.status.configure(text="Error — check provider, Ollama, GitHub permissions, file format or network.")
+                    self._append("ERROR", str(payload))
+                    self.status.configure(text="Error")
         except queue.Empty:
             pass
         self.after(100, self._poll_results)
 
+    def test_connection(self) -> None:
+        try:
+            provider, model, api_key, base_url, _github_token, _repository = self._validate_send()
+            if provider == "Ollama Local":
+                from anne.providers.ollama import OllamaProvider
+                client = OllamaProvider(base_url=base_url, model=model)
+                ok = client.ping()
+            elif provider == "Gemini":
+                from anne.providers.gemini import GeminiProvider
+                GeminiProvider(api_key=api_key, model=model)
+                ok = True
+            else:
+                from anne.providers.openrouter import OpenRouterProvider
+                OpenRouterProvider(api_key=api_key, model=model)
+                ok = True
+            self.status.configure(text="Connection OK" if ok else "Connection failed")
+        except Exception as exc:
+            self.status.configure(text=f"Connection failed: {exc}")
+
 
 if __name__ == "__main__":
-    AnneTinker().mainloop()
+    app = AnneTinker()
+    app.mainloop()
