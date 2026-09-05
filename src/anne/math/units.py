@@ -13,10 +13,10 @@ class Dimension:
     temperature: int = 0
 
     def __mul__(self, other: "Dimension") -> "Dimension":
-        return Dimension(*(a + b for a, b in zip(self.as_tuple(), other.as_tuple())))
+        return Dimension(*(a + b for a, b in zip(self.as_tuple(), other.as_tuple(), strict=True)))
 
     def __truediv__(self, other: "Dimension") -> "Dimension":
-        return Dimension(*(a - b for a, b in zip(self.as_tuple(), other.as_tuple())))
+        return Dimension(*(a - b for a, b in zip(self.as_tuple(), other.as_tuple(), strict=True)))
 
     def as_tuple(self) -> tuple[int, ...]:
         return (self.length, self.mass, self.time, self.current, self.temperature)
@@ -27,11 +27,22 @@ class Dimension:
 
 DIMENSIONLESS = Dimension()
 LENGTH = Dimension(length=1)
+MASS = Dimension(mass=1)
 TIME = Dimension(time=1)
 VELOCITY = LENGTH / TIME
 ACCELERATION = VELOCITY / TIME
+FORCE = MASS * ACCELERATION
+ENERGY = FORCE * LENGTH
 
 
 __all__ = [
-    "Dimension", "DIMENSIONLESS", "LENGTH", "TIME", "VELOCITY", "ACCELERATION"
+    "Dimension",
+    "DIMENSIONLESS",
+    "LENGTH",
+    "MASS",
+    "TIME",
+    "VELOCITY",
+    "ACCELERATION",
+    "FORCE",
+    "ENERGY",
 ]
