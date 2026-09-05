@@ -3,13 +3,13 @@
 **Policy:** Milestones are engineering deliverables, not product promises.  
 **Rule:** No public claim of “hallucination solved” or “AGI” until the matching benchmark row is green and published under `benchmarks/results/`.
 
-Last updated: 2026-07-29
+Last updated: 2026-09-05
 
 ---
 
 ## North star (research hypothesis)
 
-> Does a cognitive orchestration layer — Semantic Validation Layer (ANLA), ethical decision constraints, and Structured Failure Traces (SFT) — improve reliability of foundation-model outputs *before* delivery, in a measurable way?
+> Does a cognitive orchestration layer — Semantic Validation Layer (ANLA), ethical decision constraints, Structured Failure Traces (SFT), and experience-driven discovery — improve reliability, discovery quality, and controllability of model-assisted reasoning in a measurable way?
 
 Success is **evidence**, not slogans.
 
@@ -26,6 +26,7 @@ Success is **evidence**, not slogans.
 | ANLA score skeleton | Done (not proven) |
 | Ablation scaffold | Done (no published numbers) |
 | Independent review response | Done |
+| MITOS architecture specification | Experimental proposal |
 
 ---
 
@@ -56,6 +57,22 @@ Success is **evidence**, not slogans.
 | B3 | Report false-accept / false-reject / latency | `benchmarks/results/` + short note in `docs/` |
 | B4 | Vector or hybrid retrieval experiment (optional) behind flag | Feature flag; SQLite remains default |
 | B5 | Pipeline integration tests (full HEAR→ACT + SFT path) | Coverage of reject and approve paths |
+
+### Phase B-M — MITOS Discovery & Experience Loop (experimental)
+
+**Goal:** Test whether a bounded, high-volume hypothesis generator can improve ANNE's later selection, calibration, discovery value or computation efficiency.
+
+| ID | Milestone | Exit criteria |
+|----|-----------|---------------|
+| M1 | MITOS exploration API | EXPLORE / COMBINE / INVERT / SIMULATE interfaces with bounded output |
+| M2 | Hypothesis/experience schema | HYPOTHESIS → PREDICTION → TESTED → VERIFIED/FAILED/INCONCLUSIVE |
+| M3 | ANNE evaluation gate | Probability, benefit, novelty, testability, cost, harm-risk and uncertainty recorded |
+| M4 | Low-probability/high-value ranking experiment | Low-probability candidates remain eligible when test cost and harm risk are sufficiently low |
+| M5 | Reality feedback loop | Observed outcome stored separately from prediction; prediction error recorded |
+| M6 | MITOS learning guidance | Later MITOS generation changes measurably from prior experience |
+| M7 | Batch-size benchmark | Compare small vs larger MITOS batches against baseline generation |
+
+**Important:** M1–M7 are research milestones, not claims that MITOS currently learns or improves ANNE. Results must be published as benchmark artifacts.
 
 ---
 
@@ -91,9 +108,11 @@ These may live under `papers/whitepaper/` and `research/open_questions/` without
 
 1. **A2 + A3** — numbers + real gate path  
 2. **A4** — safety of retry loops  
-3. **B2 + B3** — clearer metrics  
-4. **C2 + C3** — external communication  
-5. Everything in Phase D  
+3. **M2 + M5 + M6** — make experience and learning measurable  
+4. **M4 + M7** — test low-probability/high-value discovery  
+5. **B2 + B3** — clearer metrics  
+6. **C2 + C3** — external communication  
+7. Everything in Phase D
 
 ---
 
@@ -103,6 +122,8 @@ These may live under `papers/whitepaper/` and `research/open_questions/` without
 - Landauer / thermodynamic explanations of semantics
 - GROMACS-driven cognitive weights
 - Claiming medical / high-stakes readiness
+- Treating simulated outcomes as real-world facts
+- Treating accumulated memory records alone as evidence of learning
 
 ---
 
@@ -110,4 +131,5 @@ These may live under `papers/whitepaper/` and `research/open_questions/` without
 
 1. Move a row to Done only with a linked commit or `benchmarks/results/` artifact.  
 2. Log scope changes under `research/decision_logs/`.  
-3. Keep README status table in sync with this roadmap.
+3. Keep README status table in sync with this roadmap.  
+4. Keep MITOS research claims separate from implemented capabilities until the corresponding experiment is reproducible.
