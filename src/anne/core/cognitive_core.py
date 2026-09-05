@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from anne.core.ai_kernel import AnneCognitiveEngine, CognitiveState
-from anne.core.learning_engine import LearningEngine
+from anne.core.learning_engine import LearningEngine, Rule
 from anne.core.pattern_engine import PatternEngine
 from anne.core.presentation import PresentationEngine
 from anne.core.verification import VerificationEngine
@@ -20,6 +20,7 @@ class CognitiveRun:
     recalled: list[Experience] | None = None
     patterns: list[Any] | None = None
     rules: list[Any] | None = None
+    applied_rules: list[Rule] | None = None
     presentation: str = ""
 
 
@@ -35,15 +36,34 @@ class AnneCognitiveCore:
         self.presenter = presenter or PresentationEngine()
         self.learning = learning or LearningEngine()
 
+    def _applicable_learned_rules(self, task: str) -> list[Rule]:
+        """Return learned rules with at least two matching terms; prevents blind application."""
+        task_terms = set(self.engine._tokens(task))
+        matched: list[tuple[float, Rule]] = []
+        for rule in self.learning.applicable(task, limit=50):
+            if rule.status != "learned":
+                continue
+            pattern_terms = set(self.engine._tokens(rule.pattern))
+            overlap = task_terms & pattern_terms
+            if len(overlap) >= 2:
+                score = len(overlap) / max(1, len(pattern_terms))
+                matched.append((score, rule))
+        matched.sort(key=lambda item: (item[0], item[1].confidence), reverse=True)
+        return [rule for _, rule in matched[:8]]
+
     def run(self, task: str, *, internet: bool = False, max_results: int = 6, outcome: str = "", lesson: str = "", success: bool | None = None) -> CognitiveRun:
         recalled = self.memory.recall(task)
         memory_context = "\n".join(
             f"EXPERIENCE: {item.task}\nPATTERNS: {', '.join(item.patterns)}\nLESSONS: {', '.join(item.lessons)}"
             for item in recalled
         )
+        applied_rules = self._applicable_learned_rules(task)
+        learned_knowledge = "\n".join(f"RULE: {rule.pattern} (confidence={rule.confidence:.2f})" for rule in applied_rules)
         research_result = self.research.research(task, max_results=max_results) if internet else None
         evidence = self.research.evidence(research_result) if research_result else []
-        state = self.engine.cycle(task, memory=memory_context, evidence=evidence, knowledge="", outcome=outcome, lesson=lesson)
+        state = self.engine.cycle(task, memory=memory_context, evidence=evidence, knowledge=learned_knowledge, outcome=outcome, lesson=lesson)
+        if applied_rules:
+            state.observations.append(f"ÖĞREN: {len(applied_rules)} learned rule applied")
         relevant_patterns = self.patterns.relevant(task)
         if relevant_patterns:
             state.observations.append(f"ÖĞREN: {len(relevant_patterns)} geçmiş örüntü ilgili bulundu")
@@ -51,17 +71,18 @@ class AnneCognitiveCore:
             claim = research_result.findings[0].snippet or research_result.findings[0].title
             verification = self.verifier.verify(claim, evidence=evidence)
             state.observations.append(f"DOĞRULAMA: {verification.status} ({verification.confidence:.0%})")
+        experience_patterns = list(dict.fromkeys([c.pattern for c in relevant_patterns] + [r.pattern for r in applied_rules]))
         experience = Experience(
             task=task, context=["internet_research" if internet else "local_only"], concepts=list(state.concepts),
             evidence=list(state.evidence), hypotheses=[h.text for h in state.hypotheses], actions=list(state.actions),
             outcome=outcome, confidence=state.confidence, uncertainty=state.uncertainty,
-            patterns=[c.pattern for c in relevant_patterns], lessons=list(state.lessons),
+            patterns=experience_patterns, lessons=list(state.lessons),
         )
         self.memory.remember(experience)
         rules = self.learning.learn(experience, success=success) if outcome.strip() or success is not None else []
         if rules:
             state.observations.append(f"ÖĞREN: {len(rules)} kural durumu güncellendi")
-        return CognitiveRun(state=state, research=research_result, recalled=recalled, patterns=relevant_patterns, rules=rules, presentation=self.presenter.render(self.engine.snapshot()))
+        return CognitiveRun(state=state, research=research_result, recalled=recalled, patterns=relevant_patterns, rules=rules, applied_rules=applied_rules, presentation=self.presenter.render(self.engine.snapshot()))
 
     def present(self, run: CognitiveRun) -> str:
         return run.presentation
