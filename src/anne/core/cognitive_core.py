@@ -1,4 +1,4 @@
-"""ANNE Cognitive Core v0.5: research, memory, learning and presentation loop."""
+"""ANNE Cognitive Core v0.6: cognition, symbolic language, research and learning."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,6 +9,7 @@ from anne.core.learning_engine import LearningEngine, Rule
 from anne.core.pattern_engine import PatternEngine
 from anne.core.presentation import PresentationEngine
 from anne.core.verification import VerificationEngine
+from anne.language.engine import LanguageAnalysis, LanguageEngine
 from anne.memory.fractal_experience import Experience, FractalExperienceMemory
 from anne.research.research_engine import ResearchEngine, ResearchResult
 
@@ -21,13 +22,14 @@ class CognitiveRun:
     patterns: list[Any] | None = None
     rules: list[Any] | None = None
     applied_rules: list[Rule] | None = None
+    language: LanguageAnalysis | None = None
     presentation: str = ""
 
 
 class AnneCognitiveCore:
-    """Model-independent orchestration layer; providers are optional presentation tools."""
+    """Model-independent orchestration layer; LLMs are optional tools."""
 
-    def __init__(self, engine=None, memory=None, research=None, patterns=None, verifier=None, presenter=None, learning=None) -> None:
+    def __init__(self, engine=None, memory=None, research=None, patterns=None, verifier=None, presenter=None, learning=None, language=None) -> None:
         self.engine = engine or AnneCognitiveEngine()
         self.memory = memory or FractalExperienceMemory()
         self.research = research or ResearchEngine()
@@ -35,6 +37,7 @@ class AnneCognitiveCore:
         self.verifier = verifier or VerificationEngine()
         self.presenter = presenter or PresentationEngine()
         self.learning = learning or LearningEngine()
+        self.language = language or LanguageEngine()
 
     def _applicable_learned_rules(self, task: str) -> list[Rule]:
         """Return learned rules with at least two matching terms; prevents blind application."""
@@ -52,6 +55,7 @@ class AnneCognitiveCore:
         return [rule for _, rule in matched[:8]]
 
     def run(self, task: str, *, internet: bool = False, max_results: int = 6, outcome: str = "", lesson: str = "", success: bool | None = None) -> CognitiveRun:
+        language = self.language.analyze(task)
         recalled = self.memory.recall(task)
         memory_context = "\n".join(
             f"EXPERIENCE: {item.task}\nPATTERNS: {', '.join(item.patterns)}\nLESSONS: {', '.join(item.lessons)}"
@@ -62,6 +66,12 @@ class AnneCognitiveCore:
         research_result = self.research.research(task, max_results=max_results) if internet else None
         evidence = self.research.evidence(research_result) if research_result else []
         state = self.engine.cycle(task, memory=memory_context, evidence=evidence, knowledge=learned_knowledge, outcome=outcome, lesson=lesson)
+        state.concepts = list(dict.fromkeys(state.concepts + [item["root"] for item in language.known_words]))
+        if language.unknown_words:
+            state.unknown.extend(language.unknown_words)
+            state.observations.append(f"DİL: {len(language.unknown_words)} bilinmeyen kelime")
+        if language.morphology:
+            state.observations.append(f"DİL: {len(language.morphology)} kelimede ek/kök analizi")
         if applied_rules:
             state.observations.append(f"ÖĞREN: {len(applied_rules)} learned rule applied")
         relevant_patterns = self.patterns.relevant(task)
@@ -73,16 +83,16 @@ class AnneCognitiveCore:
             state.observations.append(f"DOĞRULAMA: {verification.status} ({verification.confidence:.0%})")
         experience_patterns = list(dict.fromkeys([c.pattern for c in relevant_patterns] + [r.pattern for r in applied_rules]))
         experience = Experience(
-            task=task, context=["internet_research" if internet else "local_only"], concepts=list(state.concepts),
-            evidence=list(state.evidence), hypotheses=[h.text for h in state.hypotheses], actions=list(state.actions),
-            outcome=outcome, confidence=state.confidence, uncertainty=state.uncertainty,
+            task=task, context=["internet_research" if internet else "local_only", f"language_known_ratio={language.grammar['known_token_ratio']:.2f}"],
+            concepts=list(state.concepts), evidence=list(state.evidence), hypotheses=[h.text for h in state.hypotheses],
+            actions=list(state.actions), outcome=outcome, confidence=state.confidence, uncertainty=state.uncertainty,
             patterns=experience_patterns, lessons=list(state.lessons),
         )
         self.memory.remember(experience)
         rules = self.learning.learn(experience, success=success) if outcome.strip() or success is not None else []
         if rules:
             state.observations.append(f"ÖĞREN: {len(rules)} kural durumu güncellendi")
-        return CognitiveRun(state=state, research=research_result, recalled=recalled, patterns=relevant_patterns, rules=rules, applied_rules=applied_rules, presentation=self.presenter.render(self.engine.snapshot()))
+        return CognitiveRun(state=state, research=research_result, recalled=recalled, patterns=relevant_patterns, rules=rules, applied_rules=applied_rules, language=language, presentation=self.presenter.render(self.engine.snapshot()))
 
     def present(self, run: CognitiveRun) -> str:
         return run.presentation
