@@ -47,5 +47,5 @@ class DerivationEngine:
         return DerivationResult(steps=steps, result=simplified)
 
     def verify(self, result: DerivationResult, oracle: sp.Expr | str) -> DerivationResult:
-        verified = self.math.verify_identity(result.result, oracle)
+        verified = self.math.verify_equivalent_relation(result.result, oracle)
         return DerivationResult(steps=result.steps, result=result.result, verified=verified)
