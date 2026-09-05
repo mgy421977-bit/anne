@@ -97,8 +97,8 @@ class ResearchAgent:
     def report(self, package: EvidencePackage) -> EvidencePackage:
         if self.status != "RUNNING":
             raise RuntimeError("agent must be running before reporting")
-        if package.mission_id != self.agent_id and package.agent_id != self.agent_id:
-            raise ValueError("evidence package does not belong to this agent")
+        if package.agent_id != self.agent_id or package.mission_id != self.mission.objective:
+            raise ValueError("evidence package does not belong to this mission")
         for finding in package.findings:
             finding.validate()
         self.status = "COMPLETED"
