@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from anne.core.ai_kernel import AnneCognitiveEngine, CognitiveState
+from anne.core.learning_engine import LearningEngine
 from anne.core.pattern_engine import PatternEngine
 from anne.core.presentation import PresentationEngine
 from anne.core.verification import VerificationEngine
@@ -18,29 +19,23 @@ class CognitiveRun:
     research: ResearchResult | None = None
     recalled: list[Experience] | None = None
     patterns: list[Any] | None = None
+    rules: list[Any] | None = None
     presentation: str = ""
 
 
 class AnneCognitiveCore:
     """Model-independent orchestration layer; providers are optional presentation tools."""
 
-    def __init__(
-        self,
-        engine: AnneCognitiveEngine | None = None,
-        memory: FractalExperienceMemory | None = None,
-        research: ResearchEngine | None = None,
-        patterns: PatternEngine | None = None,
-        verifier: VerificationEngine | None = None,
-        presenter: PresentationEngine | None = None,
-    ) -> None:
+    def __init__(self, engine=None, memory=None, research=None, patterns=None, verifier=None, presenter=None, learning=None) -> None:
         self.engine = engine or AnneCognitiveEngine()
         self.memory = memory or FractalExperienceMemory()
         self.research = research or ResearchEngine()
         self.patterns = patterns or PatternEngine(self.memory)
         self.verifier = verifier or VerificationEngine()
         self.presenter = presenter or PresentationEngine()
+        self.learning = learning or LearningEngine()
 
-    def run(self, task: str, *, internet: bool = False, max_results: int = 6, outcome: str = "", lesson: str = "") -> CognitiveRun:
+    def run(self, task: str, *, internet: bool = False, max_results: int = 6, outcome: str = "", lesson: str = "", success: bool | None = None) -> CognitiveRun:
         recalled = self.memory.recall(task)
         memory_context = "\n".join(
             f"EXPERIENCE: {item.task}\nPATTERNS: {', '.join(item.patterns)}\nLESSONS: {', '.join(item.lessons)}"
@@ -57,36 +52,22 @@ class AnneCognitiveCore:
             verification = self.verifier.verify(claim, evidence=evidence)
             state.observations.append(f"DOĞRULAMA: {verification.status} ({verification.confidence:.0%})")
         experience = Experience(
-            task=task,
-            context=["internet_research" if internet else "local_only"],
-            concepts=list(state.concepts),
-            evidence=list(state.evidence),
-            hypotheses=[h.text for h in state.hypotheses],
-            actions=list(state.actions),
-            outcome=outcome,
-            confidence=state.confidence,
-            uncertainty=state.uncertainty,
-            patterns=[c.pattern for c in relevant_patterns],
-            lessons=list(state.lessons),
+            task=task, context=["internet_research" if internet else "local_only"], concepts=list(state.concepts),
+            evidence=list(state.evidence), hypotheses=[h.text for h in state.hypotheses], actions=list(state.actions),
+            outcome=outcome, confidence=state.confidence, uncertainty=state.uncertainty,
+            patterns=[c.pattern for c in relevant_patterns], lessons=list(state.lessons),
         )
         self.memory.remember(experience)
-        return CognitiveRun(
-            state=state,
-            research=research_result,
-            recalled=recalled,
-            patterns=relevant_patterns,
-            presentation=self.presenter.render(self.engine.snapshot()),
-        )
+        rules = self.learning.learn(experience, success=success) if outcome.strip() or success is not None else []
+        if rules:
+            state.observations.append(f"ÖĞREN: {len(rules)} kural durumu güncellendi")
+        return CognitiveRun(state=state, research=research_result, recalled=recalled, patterns=relevant_patterns, rules=rules, presentation=self.presenter.render(self.engine.snapshot()))
 
     def present(self, run: CognitiveRun) -> str:
-        """Deterministic presentation hook; an LLM provider may be layered above it."""
         return run.presentation
 
     def stats(self) -> dict[str, Any]:
-        return {
-            "memory": self.memory.stats(),
-            "patterns": len(self.patterns.discover()),
-        }
+        return {"memory": self.memory.stats(), "patterns": len(self.patterns.discover()), "learning": self.learning.stats()}
 
 
 __all__ = ["AnneCognitiveCore", "CognitiveRun"]
