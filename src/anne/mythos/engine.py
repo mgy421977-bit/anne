@@ -6,7 +6,6 @@ import random
 import time
 from dataclasses import dataclass
 from enum import Enum
-from uuid import uuid4
 
 from anne.core.cognitive_state import Hypothesis
 
@@ -37,6 +36,14 @@ class HypothesisCandidate:
     reversibility: float
     expected_benefit: float
     test_cost: float
+
+    def validate(self) -> None:
+        if not self.goal.strip() or not self.claim.strip():
+            raise ValueError("goal and claim are required")
+        for name in ("probability", "discovery_value", "novelty", "testability", "harm_risk", "reversibility", "expected_benefit", "test_cost"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1]")
 
 
 class MythosEngine:
@@ -81,6 +88,7 @@ class MitosEngine:
 
     def __init__(self, seed: int | None = None) -> None:
         self.random = random.Random(seed)
+        self._candidate_counter = 0
 
     def generate(self, goal: str, batch_size: int = 10) -> list[HypothesisCandidate]:
         if not goal.strip():
@@ -90,6 +98,7 @@ class MitosEngine:
         modes = list(ExplorationMode)
         candidates: list[HypothesisCandidate] = []
         for index in range(batch_size):
+            self._candidate_counter += 1
             mode = modes[index % len(modes)]
             probability = self.random.uniform(0.05, 0.95)
             novelty = self.random.uniform(0.25, 0.95)
@@ -97,14 +106,16 @@ class MitosEngine:
             expected_benefit = self.random.uniform(0.2, 1.0)
             test_cost = self.random.uniform(0.05, 0.8)
             discovery_value = round(0.30 * novelty + 0.25 * testability + 0.25 * expected_benefit + 0.20 * (1.0 - test_cost), 4)
-            candidates.append(HypothesisCandidate(
-                id=f"cand_{uuid4().hex[:12]}", goal=goal,
+            candidate = HypothesisCandidate(
+                id=f"cand_{self._candidate_counter:08d}", goal=goal,
                 claim=self._claim(goal, mode, index), mode=mode,
                 probability=round(probability, 4), discovery_value=discovery_value,
                 novelty=round(novelty, 4), testability=round(testability, 4),
                 harm_risk=0.0, reversibility=1.0,
                 expected_benefit=round(expected_benefit, 4), test_cost=round(test_cost, 4),
-            ))
+            )
+            candidate.validate()
+            candidates.append(candidate)
         return candidates
 
     @staticmethod
