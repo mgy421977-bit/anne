@@ -1,7 +1,7 @@
 """Provider-neutral artifact storage contract for ANNE."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
 
@@ -13,7 +13,7 @@ class ArtifactMetadata:
     key: str
     content_type: str = "application/octet-stream"
     size_bytes: int = 0
-    created_at: datetime = datetime.now(timezone.utc)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     sha256: str = ""
     data_class: str = "PRIVATE_CLOUD"
 
