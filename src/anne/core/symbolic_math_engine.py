@@ -40,6 +40,13 @@ class SymbolicMathEngine:
         return sp.factor(sp.cancel(sp.expand(expression)))
 
     def verify_identity(self, left: sp.Expr | str, right: sp.Expr | str) -> bool:
-        left_expr = sp.sympify(left)
-        right_expr = sp.sympify(right)
-        return sp.simplify(left_expr - right_expr) == 0
+        return sp.simplify(sp.sympify(left) - sp.sympify(right)) == 0
+
+    def verify_equivalent_relation(self, left: sp.Expr | str, right: sp.Expr | str) -> bool:
+        """Verify zero-relations after clearing denominators and scalar factors."""
+        left_num = sp.together(sp.sympify(left)).as_numer_denom()[0]
+        right_num = sp.together(sp.sympify(right)).as_numer_denom()[0]
+        if sp.simplify(left_num) == 0 or sp.simplify(right_num) == 0:
+            return sp.simplify(left_num - right_num) == 0
+        ratio = sp.simplify(left_num / right_num)
+        return ratio != 0
