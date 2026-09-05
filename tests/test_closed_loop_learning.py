@@ -70,6 +70,6 @@ def test_mismatched_context_does_not_apply_rule(tmp_path):
         learning.learn(_experience(i, "başarılı"), success=True)
 
     core = AnneCognitiveCore(memory=memory, learning=learning)
-    run = core.run("Fabrikanın gece tüketimi yüksek; gündüz tüketimi düşüktür.")
+    run = core.run("İşletmenin gece vardiyası ağırlıklı; güneşlenme saatlerinde yük yok.")
 
     assert not run.applied_rules
