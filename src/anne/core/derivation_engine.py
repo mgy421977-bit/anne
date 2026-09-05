@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import sympy as sp
 
-from anne.core.symbolic_math_engine import SymbolicEquation, SymbolicMathEngine
+from anne.core.symbolic_math_engine import SymbolicMathEngine
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class DerivationStep:
 class DerivationResult:
     steps: tuple[DerivationStep, ...]
     result: sp.Expr
-    verified: bool
+    verified: bool = False
 
 
 class DerivationEngine:
@@ -29,21 +29,22 @@ class DerivationEngine:
     def __init__(self, math: SymbolicMathEngine | None = None) -> None:
         self.math = math or SymbolicMathEngine()
 
-    def derive_kinematic_elimination(self) -> DerivationResult:
-        first = self.math.parse_equation("v = u + a*t")
-        second = self.math.parse_equation("s = u*t + (1/2)*a*t**2")
-        t_value = self.math.isolate(first, "t")
-        substituted = self.math.substitute(second, "t", t_value)
-        simplified = self.math.simplify_relation(substituted)
+    def derive_elimination(self, equations: tuple[str, str], variable: str) -> DerivationResult:
+        first = self.math.parse_equation(equations[0])
+        second = self.math.parse_equation(equations[1])
+        isolated = self.math.isolate(first, variable)
+        substituted = self.math.substitute(second, variable, isolated)
+        expanded = sp.expand(substituted)
+        simplified = self.math.simplify_relation(expanded)
         steps = (
-            DerivationStep("parse", "v = u + a*t; s = u*t + (1/2)*a*t**2", "Parsed source equations."),
-            DerivationStep("identify_elimination_variable", "t", "t occurs in both equations."),
-            DerivationStep("isolate", "t = (v - u)/a", "Isolated t from the first equation."),
-            DerivationStep("substitute", str(substituted), "Substituted t into the second equation."),
-            DerivationStep("expand", str(sp.expand(substituted)), "Expanded the substituted expression."),
-            DerivationStep("simplify", str(simplified), "Normalized the algebraic relation."),
+            DerivationStep("parse", "; ".join(equations), "Parsed source equations."),
+            DerivationStep("identify_elimination_variable", variable, "Variable occurs in both equations."),
+            DerivationStep("isolate", f"{variable} = {sp.sstr(isolated)}", f"Isolated {variable} from the first equation."),
+            DerivationStep("substitute", sp.sstr(substituted), f"Substituted {variable} into the second equation."),
+            DerivationStep("expand", sp.sstr(expanded), "Expanded the substituted expression."),
+            DerivationStep("simplify", sp.sstr(simplified), "Normalized the algebraic relation."),
         )
-        return DerivationResult(steps=steps, result=simplified, verified=False)
+        return DerivationResult(steps=steps, result=simplified)
 
     def verify(self, result: DerivationResult, oracle: sp.Expr | str) -> DerivationResult:
         verified = self.math.verify_identity(result.result, oracle)
