@@ -1,7 +1,8 @@
 """Bounded specialist-agent orchestration for MITOS.
 
-MITOS decides what needs investigation; specialist agents perform bounded
-research and return evidence packages. Agents never inherit MITOS authority.
+MITOS is ANNE's subconscious-inspired exploration layer: it decides what
+needs investigation, creates temporary specialist workers, and receives
+evidence back for synthesis. Specialist agents never inherit MITOS authority.
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ class ResearchMission:
         "external_side_effects",
         "system_modification",
         "credential_access",
+        "financial_transaction",
         "agent_creation",
     )
     search_budget: int = 25
@@ -45,6 +47,9 @@ class ResearchMission:
             raise ValueError("scope is required")
         if self.search_budget < 0 or self.compute_budget < 0 or self.runtime_seconds < 0:
             raise ValueError("research budgets cannot be negative")
+        required = {"external_side_effects", "credential_access", "system_modification", "financial_transaction", "agent_creation"}
+        if not required.issubset(self.forbidden_actions):
+            raise ValueError("specialist mission is missing mandatory safety restrictions")
 
 
 @dataclass(frozen=True)
@@ -92,6 +97,8 @@ class ResearchAgent:
     def report(self, package: EvidencePackage) -> EvidencePackage:
         if self.status != "RUNNING":
             raise RuntimeError("agent must be running before reporting")
+        if package.mission_id != self.agent_id and package.agent_id != self.agent_id:
+            raise ValueError("evidence package does not belong to this agent")
         for finding in package.findings:
             finding.validate()
         self.status = "COMPLETED"
@@ -110,6 +117,7 @@ class ResourceGovernor:
     runtime_reserved: int = 0
 
     def reserve(self, mission: ResearchMission) -> bool:
+        mission.validate()
         if self.active_agents + 1 > self.max_agents:
             return False
         if self.searches_reserved + mission.search_budget > self.max_total_searches:
@@ -124,9 +132,15 @@ class ResourceGovernor:
         self.runtime_reserved += mission.runtime_seconds
         return True
 
+    def release(self, mission: ResearchMission) -> None:
+        self.active_agents = max(0, self.active_agents - 1)
+        self.searches_reserved = max(0, self.searches_reserved - mission.search_budget)
+        self.compute_reserved = max(0.0, self.compute_reserved - mission.compute_budget)
+        self.runtime_reserved = max(0, self.runtime_reserved - mission.runtime_seconds)
+
 
 class MitosAgentSwarm:
-    """Creates only the specialist agents justified by a research plan."""
+    """Creates only specialist agents justified by a bounded research plan."""
 
     def __init__(self, governor: ResourceGovernor | None = None) -> None:
         self.governor = governor or ResourceGovernor()
