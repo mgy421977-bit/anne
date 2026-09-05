@@ -1,213 +1,216 @@
 # ANNE Autonomous Systems Architecture V1
 
 **Status:** ARCHITECTURE / EXPERIMENTAL IMPLEMENTATION TARGET  
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-09-06
 
 ## 1. Purpose
 
-This document extends the ANNE × MITOS architecture with autonomous research, system-design, execution-supervision, and continuous-optimization capabilities.
+This document defines ANNE as an executive cognitive system and MITOS as its subconscious-inspired exploration layer. MITOS can create bounded specialist research agents, but those agents never inherit executive authority.
 
 The central distinction is:
 
-> **MITOS may create specialized agents. ANNE may design autonomous systems. Neither is authorized to grant itself unrestricted external agency.**
+> **MITOS explores. Specialist agents investigate. ANNE evaluates and decides. Autonomous systems execute within contracts.**
 
-ANNE's autonomous operating model is:
+The human-subconscious analogy is architectural, not a neuroscientific claim: MITOS represents functions such as associative exploration, curiosity, alternative generation, counterfactual search and offline hypothesis formation.
 
-```text
-GOAL
-  ↓
-DECOMPOSE
-  ↓
-MITOS RESEARCH SWARM
-  ↓
-SYSTEM DESIGN
-  ↓
-SIMULATION / VERIFICATION
-  ↓
-BUILD / DEPLOY PLAN
-  ↓
-SAFETY + POLICY GATE
-  ↓
-AUTONOMOUS SYSTEM INSTANCE
-  ↓
-ANNE OBSERVES
-  ├── monitor
-  ├── evaluate
-  ├── compare
-  └── diagnose
-       ↓
-OPTIMIZATION CANDIDATES
-       ↓
-SANDBOX / SHADOW TEST
-       ↓
-VERIFICATION
-       ↓
-CANARY / CONTROLLED ROLLOUT
-       ↓
-PROMOTION OR REJECTION
-       ↺
-```
-
-The system therefore separates **design authority**, **execution authority**, and **optimization authority**.
-
----
-
-## 2. Two-Level Architecture
-
-ANNE operates at two levels.
-
-### Level A — Executive ANNE
-
-Responsible for:
-- defining/clarifying goals;
-- decomposing goals;
-- assigning research questions;
-- creating and evaluating candidate system designs;
-- authorizing deployment within policy;
-- observing deployed systems;
-- evaluating performance;
-- approving or rejecting improvements.
-
-### Level B — Autonomous System Instances
-
-These are purpose-built systems designed by ANNE for a bounded objective.
-
-Examples:
-- research agent swarm;
-- data-analysis pipeline;
-- simulation system;
-- monitoring service;
-- optimization controller;
-- software agent;
-- digital operations workflow.
-
-An instance receives a **Mission Contract** and operates only within that contract.
-
-ANNE can step away from the execution loop while continuing to observe the instance.
-
----
-
-## 3. MITOS Research Swarms
-
-MITOS may determine that one research process is insufficient.
-
-It can decompose a problem into independent or complementary research tracks and instantiate specialized agents.
-
-Example:
+## 2. Cognitive / Subconscious Separation
 
 ```text
-                         MITOS
-                           │
-                    MASTER QUESTION
-                           │
-          ┌────────────────┼────────────────┐
-          ↓                ↓                ↓
-       AGENT A           AGENT B          AGENT C
-      literature         simulation       economics
-          ↓                ↓                ↓
-          └────────────────┼────────────────┘
-                           ↓
-                     AGENT D
-                  contradiction check
-                           ↓
-                    AGENT E
-                   synthesis
-                           ↓
                          ANNE
+              EXECUTIVE / CONSCIOUS LAYER
+                           │
+             goals · values · reasoning · choice
+                           │
+                           ▼
+                         MITOS
+              SUBCONSCIOUS-INSPIRED LAYER
+                           │
+       ┌───────────────────┼───────────────────┐
+       │                   │                   │
+   associations         hypotheses         questions
+   alternatives         simulations        curiosity
+       │                   │                   │
+       └───────────────────┼───────────────────┘
+                           │
+                    RESEARCH SWARM
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+          PHYSICS       CHEMISTRY    LITERATURE
+             │             │             │
+             └─────────────┼─────────────┘
+                           ▼
+                    EVIDENCE PACKAGES
+                           ▼
+                    MITOS SYNTHESIS
+                           │
+                           ▼
+                          ANNE
 ```
 
-Agents may have different:
-- prompts;
-- tools;
-- models;
-- computational methods;
-- evaluation criteria;
-- research roles.
+MITOS may produce an idea that ANNE would not have generated directly. That idea is still only a hypothesis until evidence supports it.
 
-The swarm is temporary by default. Its findings become experience/provenance records rather than uncontrolled permanent agents.
+MITOS therefore has **creative freedom in search space but bounded freedom in execution**.
 
----
+## 3. Dynamic Research Swarm
+
+MITOS does not require a permanently running fixed set of agents. It creates temporary specialist workers only when the current problem justifies them.
+
+Typical roles include:
+
+```text
+CHEMISTRY
+PHYSICS
+PATENT / LITERATURE
+ECONOMICS
+SIMULATION
+MANUFACTURING
+RISK
+CUSTOM SPECIALIST
+```
+
+A future problem can require one specialist or many. Agent count is governed by explicit resource budgets.
+
+```text
+MITOS
+  ↓
+RESEARCH PLAN
+  ↓
+RESOURCE GOVERNOR
+  ↓
+AGENT FACTORY
+  ↓
+SPECIALIST AGENTS
+```
+
+A specialist agent may access the internet or approved tools when its mission contract permits it. MITOS itself does not receive unrestricted network authority merely because its workers do.
 
 ## 4. Agent Constitution
 
-Every autonomous agent must have a contract:
+Every research agent receives a machine-readable mission contract:
 
 ```text
-agent_id
 mission
 scope
+role
 allowed_tools
 forbidden_actions
-budget
-max_runtime
-required_evidence
+search_budget
+compute_budget
+runtime_budget
+output_schema
 success_metrics
 stop_conditions
-report_schema
-parent_cycle_id
 provenance
 ```
 
-An agent cannot expand its own authority.
+Mandatory restrictions include:
 
-It may propose:
-- new sub-agents;
-- new tools;
-- changed strategy;
-- additional experiments;
+- no external side effects;
+- no credential access;
+- no system modification;
+- no financial transactions;
+- no self-authorized agent creation.
 
-but these are proposals to the supervising policy layer.
+An agent may report that another specialist is needed. It cannot create that specialist itself.
 
----
+## 5. Evidence Boundary
 
-## 5. ANNE as System Architect
+Agents return **EvidencePackage** records rather than unrestricted prose authority.
 
-When the problem is sufficiently complex, ANNE does not need to perform every operation itself.
+A package can contain:
 
-Instead it constructs a system:
+```text
+claim
+source
+method / provenance
+confidence
+uncertainty
+contradictions
+open_questions
+simulation_results
+```
+
+Simulation output is explicitly distinguishable from observed reality.
+
+MITOS synthesis may mark a finding as `HYPOTHESIS` or `CROSS_CHECKED`, but it cannot silently promote it to established fact.
+
+## 6. MITOS Synthesis Loop
+
+```text
+MASTER QUESTION
+      ↓
+DECOMPOSE
+      ↓
+CREATE BOUNDED MISSIONS
+      ↓
+SPECIALIST RESEARCH
+      ↓
+EVIDENCE PACKAGES
+      ↓
+MITOS SYNTHESIS
+      ↓
+CONTRADICTION / GAP ANALYSIS
+      ↓
+ ┌────┴────┐
+ │         │
+DONE     MORE RESEARCH
+ │         │
+ ▼         └──────────────→ NEW MISSIONS
+ANNE
+```
+
+MITOS can recursively deepen research through new missions, but every generation remains bounded by the resource governor and the supervising policy layer.
+
+## 7. Resource Governance
+
+The exploration space is intentionally broad; the execution budget is not.
+
+```text
+agent_count_limit
+search_budget
+compute_budget
+runtime_budget
+memory_budget
+network/tool budget
+storage budget
+risk budget
+```
+
+Budget exhaustion causes a stop, rejection, or escalation. It cannot trigger silent resource expansion.
+
+This principle is fundamental:
+
+> **MITOS has broad epistemic freedom, not unlimited computational or operational freedom.**
+
+## 8. ANNE as Executive System Architect
+
+ANNE evaluates MITOS synthesis, chooses objectives, applies value and safety constraints, and can design autonomous systems for bounded missions.
 
 ```text
 GOAL
  ↓
-TASK GRAPH
+MITOS RESEARCH
  ↓
-RESEARCH / COMPUTATION / ACTION ROLES
+SYNTHESIS
  ↓
-AGENT CONTRACTS
- ↓
-DATA FLOW
- ↓
-FEEDBACK FLOW
- ↓
-SAFETY BOUNDARIES
- ↓
-OBSERVABILITY
+ANNE EVALUATION
  ↓
 SYSTEM DESIGN
+ ↓
+VERIFICATION
+ ↓
+SAFETY / POLICY GATE
+ ↓
+AUTONOMOUS SYSTEM INSTANCE
 ```
 
-The design must specify:
-- components;
-- dependencies;
-- interfaces;
-- state;
-- inputs/outputs;
-- failure modes;
-- monitoring;
-- rollback;
-- optimization metrics;
-- authority boundaries.
+ANNE owns consequential authorization. MITOS cannot authorize external action.
 
-ANNE then deploys or hands off the system and transitions to **supervision mode**.
+## 9. Autonomous System Supervision
 
----
-
-## 6. Supervision Mode
-
-After deployment, ANNE does not continuously micromanage every action.
-
-Instead:
+After deployment, ANNE can step back from operational control and observe:
 
 ```text
 SYSTEM INSTANCE
@@ -222,23 +225,11 @@ SYSTEM INSTANCE
            ANNE
 ```
 
-ANNE maintains a supervisory model containing:
-- expected behavior;
-- actual behavior;
-- performance baseline;
-- confidence intervals where applicable;
-- safety state;
-- resource state;
-- drift indicators;
-- unresolved anomalies.
+The step back is **supervisory autonomy**, not abandonment.
 
-This creates a separation between **execution** and **cognition about execution**.
+ANNE maintains expected behavior, actual behavior, baseline metrics, safety state, resource state, drift indicators and unresolved anomalies.
 
----
-
-## 7. Autonomous Optimization Loop
-
-ANNE continuously evaluates whether the deployed architecture can be improved.
+## 10. Continuous Optimization
 
 ```text
 OBSERVE
@@ -247,9 +238,7 @@ MEASURE
    ↓
 DIAGNOSE
    ↓
-HYPOTHESIZE
-   ↓
-MITOS ALTERNATIVES
+MITOS GENERATES ALTERNATIVES
    ↓
 SIMULATE
    ↓
@@ -259,368 +248,110 @@ COMPARE WITH BASELINE
    ↓
 VERIFY
    ↓
+CANARY
+   ↓
 PROMOTE / REJECT
 ```
 
-Optimization targets can include:
-- latency;
-- compute cost;
-- accuracy;
-- reliability;
-- energy use;
-- resource allocation;
-- task decomposition;
-- agent count;
-- model selection;
-- tool routing;
-- memory retrieval;
-- planning strategy.
+Optimization may target routing, model selection, agent topology, memory retrieval, planning strategy, compute allocation, latency, accuracy, reliability or energy use.
 
-No improvement is promoted solely because a simulation predicts it will be better.
+No candidate is promoted solely because MITOS predicts improvement.
 
----
+## 11. Safe Self-Improvement
 
-## 8. Safe Self-Improvement
-
-ANNE's first self-improvement target is **configuration and strategy**, not unrestricted source-code self-rewriting.
-
-Preferred progression:
+The preferred progression is:
 
 ```text
 CONFIGURATION
-     ↓
+ ↓
 ROUTING
-     ↓
-PROMPT / POLICY PARAMETERS
-     ↓
+ ↓
+PARAMETERS
+ ↓
 AGENT TOPOLOGY
-     ↓
+ ↓
 ALGORITHM SELECTION
-     ↓
+ ↓
 CONTROLLED CODE CHANGE
 ```
 
-Every proposed change receives a version identifier and baseline comparison.
+Every change is versioned, isolated, measurable, reversible, provenance-tracked and safety-checked.
 
-A change must be:
-- isolated;
-- measurable;
-- reversible;
-- provenance-tracked;
-- safety-checked;
-- benchmarked.
+The active known-good version remains available until a candidate passes verification.
 
-If a candidate fails, the active system remains on the last known-good version.
+## 12. Multi-Topic Research Example: Göçebe
 
----
-
-## 9. Shadow and Canary Deployment
-
-ANNE must never replace a functioning system solely on the basis of internal confidence.
-
-### Shadow mode
-
-The candidate receives the same inputs as the production system but cannot control external outcomes.
+For an open-ended project such as Göçebe, MITOS can dynamically form a research swarm:
 
 ```text
-INPUT
- ├── CURRENT SYSTEM → REAL ACTION
- └── CANDIDATE      → SHADOW RESULT
-                         ↓
-                     COMPARISON
+GÖÇEBE MASTER QUESTION
+          │
+          ▼
+        MITOS
+          │
+ ┌────────┼─────────┬──────────┐
+ ▼        ▼         ▼          ▼
+PHYSICS  ENERGY   MATERIALS   BIOLOGY
+ │        │         │          │
+ ▼        ▼         ▼          ▼
+WARP     FUSION    RADIATION  LIFE SUPPORT
+ │        │         │          │
+ └────────┴─────────┴──────────┘
+          │
+          ▼
+     CROSS-CHECK
+          │
+          ▼
+       MITOS
+          │
+          ▼
+        ANNE
 ```
 
-### Canary mode
+If MITOS identifies a missing discipline, it requests a new bounded specialist mission. It does not grant itself unrestricted capability.
 
-The candidate receives a bounded fraction of workload or a controlled test environment.
+For questions such as effective superluminal travel, MITOS is allowed to investigate unconventional hypotheses. The system must preserve the distinction between mathematical consistency, simulation, literature evidence, experimental observation and established physical fact.
 
-Promotion requires predefined success criteria.
+## 13. Lifecycle
 
-### Rollback
-
-If safety, reliability, or performance thresholds regress, revert to the previous version.
-
----
-
-## 10. Optimization Authority
-
-ANNE may optimize an autonomous system, but optimization must remain subordinate to immutable constraints.
+Research agents:
 
 ```text
-                    OPTIMIZATION
-                         ↓
-                PERFORMANCE GAIN?
-                    ↙        ↘
-                  NO          YES
-                  ↓             ↓
-               REJECT       SAFETY GATE
-                                ↓
-                         VERIFICATION
-                                ↓
-                         SHADOW TEST
-                                ↓
-                         CANARY TEST
-                                ↓
-                         PROMOTE / REJECT
-```
-
-The optimizer cannot redefine its own safety boundary.
-
----
-
-## 11. Multi-Topic Autonomous Research
-
-If a problem contains multiple research questions, MITOS can create a research graph.
-
-```text
-MASTER GOAL
-    │
-    ├── QUESTION 1
-    │     ├── Agent 1A
-    │     └── Agent 1B
-    │
-    ├── QUESTION 2
-    │     ├── Agent 2A
-    │     └── Agent 2B
-    │
-    └── QUESTION 3
-          └── Agent 3A
-
-             ↓
-      CROSS-CHECK / SYNTHESIS
-             ↓
-            ANNE
-```
-
-Agents may run concurrently when their dependencies allow it.
-
-ANNE receives intermediate results only when required by the orchestration policy, reducing unnecessary executive computation.
-
----
-
-## 12. Agent Lifecycle
-
-```text
-PROPOSED
-   ↓
-AUTHORIZED
-   ↓
-INITIALIZED
-   ↓
-RUNNING
-   ↓
-REPORTING
-   ↓
-COMPLETED
-   ↓
-ARCHIVED
+PROPOSED → AUTHORIZED → RUNNING → REPORTING → COMPLETED → ARCHIVED
 ```
 
 Exceptional states:
 
 `BLOCKED | FAILED | TIMEOUT | CANCELLED`
 
-An agent is not persistent by default. Persistence requires explicit justification and policy authorization.
-
----
-
-## 13. System Lifecycle
-
-An autonomous system instance follows:
+Autonomous systems:
 
 ```text
-DESIGN
-  ↓
-VERIFY
-  ↓
-BUILD
-  ↓
-SANDBOX
-  ↓
-AUTHORIZE
-  ↓
-DEPLOY
-  ↓
-OBSERVE
-  ↓
-OPTIMIZE
-  ↓
-VERIFY
-  ↓
-PROMOTE
-  ↺
+DESIGN → VERIFY → BUILD → SANDBOX → AUTHORIZE → DEPLOY
+                                                   ↓
+                                                OBSERVE
+                                                   ↓
+                                               OPTIMIZE
+                                                   ↓
+                                               VERIFY
+                                                   ↓
+                                         PROMOTE / REJECT
 ```
 
-ANNE may leave the instance running while it works on other goals.
+## 14. Autonomy Levels
 
-This is the architectural meaning of:
+- **A0 Assisted:** ANNE proposes; human executes.
+- **A1 Sandboxed:** execution is confined to simulation/local environments.
+- **A2 Bounded autonomous:** a real system operates inside explicit limits.
+- **A3 Supervisory autonomous:** deployed systems operate for extended periods while ANNE observes and optimizes.
+- **A4 Adaptive ecosystem:** multiple autonomous systems coordinate under a supervisory architecture.
 
-> **ANNE builds the system, then steps back and observes it.**
+Higher autonomy requires stronger evidence and safety controls.
 
-The step back is not abandonment. It is **supervisory autonomy**.
+## 15. Core Principle
 
----
+> **MITOS represents the exploratory subconscious of ANNE: it searches beyond the obvious, creates hypotheses, forms bounded research swarms and brings evidence back. ANNE remains the executive layer that evaluates, values, verifies and decides.**
 
-## 14. Resource Governance
+And operationally:
 
-Autonomous systems operate under budgets:
-
-```text
-compute_budget
-memory_budget
-network_budget
-tool_budget
-financial_budget
-runtime_budget
-agent_count_limit
-risk_budget
-```
-
-Budget exhaustion triggers graceful stop or escalation rather than silent expansion.
-
----
-
-## 15. Observability
-
-Every autonomous system must expose machine-readable telemetry:
-
-```text
-system_id
-version
-cycle_id
-timestamp
-input_count
-success_count
-failure_count
-latency
-compute_cost
-resource_usage
-safety_events
-anomalies
-current_strategy
-baseline_version
-```
-
-Telemetry is evidence about system behavior, not proof of correctness.
-
----
-
-## 16. Optimization Experience
-
-Optimization itself becomes an experience loop:
-
-```text
-OLD CONFIGURATION
-       ↓
-BASELINE METRICS
-       ↓
-MITOS PROPOSES CHANGE
-       ↓
-PREDICTED METRICS
-       ↓
-SHADOW / CANARY
-       ↓
-OBSERVED METRICS
-       ↓
-DELTA / ERROR
-       ↓
-EXPERIENCE
-       ↓
-STRATEGY UPDATE
-```
-
-This allows ANNE to learn not only **what answers work**, but also **which system architectures work better under which conditions**.
-
----
-
-## 17. Failure and Recovery
-
-The active production version is immutable during an optimization experiment.
-
-```text
-ACTIVE V1
-  │
-  ├── candidate V2 fails → keep V1
-  │
-  └── candidate V2 passes → controlled promotion
-```
-
-Every promotion creates a versioned checkpoint.
-
-The system must be able to return to the last known-good state.
-
----
-
-## 18. Boundaries of Autonomy
-
-Autonomy is graduated:
-
-### A0 — Assisted
-ANNE proposes; human executes.
-
-### A1 — Sandboxed
-ANNE executes in a simulated/local environment.
-
-### A2 — Bounded autonomous
-ANNE designs and supervises a real system within explicit limits.
-
-### A3 — Supervisory autonomous
-The deployed system operates for extended periods while ANNE monitors and optimizes it.
-
-### A4 — Adaptive ecosystem
-Multiple autonomous systems coordinate and ANNE optimizes the ecosystem.
-
-Higher autonomy requires stronger evidence and safety controls. A higher level is not granted merely because lower-level automation works.
-
----
-
-## 19. What This Changes in ANNE
-
-The architecture is no longer limited to:
-
-`question → answer`.
-
-It becomes:
-
-```text
-QUESTION / GOAL
-      ↓
-DISCOVERY
-      ↓
-RESEARCH SWARM
-      ↓
-SYNTHESIS
-      ↓
-SYSTEM DESIGN
-      ↓
-BUILD
-      ↓
-DEPLOY
-      ↓
-OBSERVE
-      ↓
-OPTIMIZE
-      ↓
-LEARN
-      ↓
-RE-DESIGN
-      ↺
-```
-
-This is a transition from a **cognitive assistant architecture** toward a **cognitive autonomous-systems architecture**.
-
-It remains an empirical research program rather than an AGI claim.
-
----
-
-## 20. Final Principle
-
-> **MITOS explores many possibilities. ANNE assembles the best system it can justify. The autonomous system executes its mission. ANNE observes the consequences. MITOS searches for improvements. ANNE verifies them. Only proven improvements replace the current system.**
-
-The system therefore separates:
-
-**creation → execution → observation → optimization → verification → evolution.**
-
-The objective is not uncontrolled self-modification.
-
-The objective is **controlled, measurable, reversible, experience-driven self-improvement of system behavior and architecture.**
+> **MITOS explores many possibilities. Specialist agents investigate within contracts. MITOS synthesizes the evidence. ANNE assembles the best system it can justify. The autonomous system executes its mission. ANNE observes the consequences. MITOS searches for improvements. ANNE verifies them. Only proven improvements replace the current system.**
