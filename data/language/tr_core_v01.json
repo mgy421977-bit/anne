@@ -1,0 +1,28 @@
+{
+  "language": "tr",
+  "name": "ANNE Turkish Core v0.1",
+  "purpose": "Seed knowledge for symbolic Turkish analysis; expandable without model-weight updates.",
+  "principles": [
+    "Turkish is agglutinative: suffixes can be composed onto a root.",
+    "Vowel harmony guides many suffix variants.",
+    "Basic declarative clause order is commonly subject-object-verb, with contextual variation.",
+    "The question particle mi/mı/mu/mü is written separately."
+  ],
+  "suffix_families": {
+    "plural": ["-ler", "-lar"],
+    "locative": ["-de", "-da", "-te", "-ta"],
+    "ablative": ["-den", "-dan", "-ten", "-tan"],
+    "dative": ["-e", "-a"],
+    "accusative": ["-i", "-ı", "-u", "-ü"],
+    "first_person_singular_possessive": ["-im", "-ım", "-um", "-üm", "-m"],
+    "first_person_plural_possessive": ["-imiz", "-ımız", "-umuz", "-ümüz"]
+  },
+  "examples": [
+    {"surface": "evler", "root": "ev", "suffixes": ["plural"], "meaning": "houses"},
+    {"surface": "evim", "root": "ev", "suffixes": ["first_person_singular_possessive"], "meaning": "my house"},
+    {"surface": "evde", "root": "ev", "suffixes": ["locative"], "meaning": "in/at the house"},
+    {"surface": "evden", "root": "ev", "suffixes": ["ablative"], "meaning": "from the house"},
+    {"surface": "kitaplar", "root": "kitap", "suffixes": ["plural"], "meaning": "books"},
+    {"surface": "kitaplarım", "root": "kitap", "suffixes": ["plural", "first_person_singular_possessive"], "meaning": "my books"}
+  ]
+}
