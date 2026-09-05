@@ -39,22 +39,20 @@ def test_evidence_preserves_provenance_and_synthesis():
     swarm = MitosAgentSwarm()
     agent = swarm.create([mission(AgentRole.PHYSICS)])[0]
     agent.start()
-    package = agent.report(
-        EvidencePackage(
-            mission_id="m1",
-            agent_id=agent.agent_id,
-            role=AgentRole.PHYSICS,
-            findings=[
-                EvidenceItem(
-                    claim="Candidate mechanism is mathematically consistent under stated assumptions",
-                    source="public-paper-A",
-                    evidence_kind="HYPOTHESIS",
-                    confidence=0.7,
-                    uncertainty="No experimental confirmation",
-                    provenance="paper-A:section-4",
-                )
-            ],
-        )
+    package = EvidencePackage(
+        mission_id=agent.mission.mission_id,
+        agent_id=agent.agent_id,
+        role=AgentRole.PHYSICS,
+        findings=(
+            EvidenceItem(
+                claim="Candidate mechanism is mathematically consistent under stated assumptions",
+                source="public-paper-A",
+                evidence_kind="HYPOTHESIS",
+                confidence=0.7,
+                uncertainty="No experimental confirmation",
+                provenance="paper-A:section-4",
+            ),
+        ),
     )
     swarm.submit(package)
     synthesis = MitosSynthesis.from_packages(swarm.evidence)
