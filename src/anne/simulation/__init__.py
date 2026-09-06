@@ -3,5 +3,7 @@
 from .world import SimulatedWorld
 from .simulator import CognitiveSimulator
 from .metrics import SimulationMetrics
+from .workspace import Workspace
+from .memory_governor import MemoryGovernor
 
-__all__ = ["SimulatedWorld", "CognitiveSimulator", "SimulationMetrics"]
+__all__ = ["SimulatedWorld", "CognitiveSimulator", "SimulationMetrics", "Workspace", "MemoryGovernor"]
