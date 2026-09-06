@@ -1,8 +1,8 @@
 """Executable orchestration loop for the canonical ANNE architecture.
 
-The runtime is deliberately provider- and hardware-neutral.  Model output is
+The runtime is deliberately provider- and hardware-neutral. Model output is
 never promoted to FACT by this layer; observations, hypotheses, predictions,
-outcomes, and experience remain explicitly typed.  External actions are
+outcomes, and experience remain explicitly typed. External actions are
 optional and must pass AgencyGate before an executor is called.
 """
 from __future__ import annotations
@@ -14,8 +14,10 @@ from typing import Any, Protocol
 from anne.core.agency_gate import ActionDecision, ActionProposal, AgencyGate
 from anne.core.cognitive_cycle import (
     CognitiveCycle,
+    CycleStatus,
     EvidenceKind,
     Observation,
+    Outcome,
     Prediction,
 )
 from anne.memory.local_memory import LocalMemory
@@ -122,7 +124,7 @@ authority for value, safety, planning and external action.
             goal, batch_size=self.config.max_mitos_candidates
         )
         cycle.hypothesis_ids.extend(candidate.id for candidate in candidates)
-        cycle.status = cycle.status.EXPLORED
+        cycle.status = CycleStatus.EXPLORED
 
         candidate_text = "\n".join(
             f"- {candidate.id}: {candidate.claim} "
@@ -150,7 +152,7 @@ authority for value, safety, planning and external action.
             )
         )
         cycle.plan = {"mode": "bounded_reasoning", "external_action": bool(action)}
-        cycle.status = cycle.status.PLANNED
+        cycle.status = CycleStatus.PLANNED
 
         authorization_text: str | None = None
         action_result: Any = None
@@ -172,17 +174,14 @@ authority for value, safety, planning and external action.
                     else:
                         action_result = self.action_executor.execute(action)
                         cycle.action = {"action": action.action, "target": action.target}
-                        cycle.status = cycle.status.ACTED
+                        cycle.status = CycleStatus.ACTED
                 else:
                     cycle.block(authorization.reason)
         else:
             cycle.authorize("no external action requested")
 
         cycle.record_outcome(
-            # A model response is not treated as an external observation.
-            # The outcome is therefore marked unobserved; this prevents a
-            # single generation from being mistaken for verified learning.
-            __import__("anne.core.cognitive_cycle", fromlist=["Outcome"]).Outcome(
+            Outcome(
                 prediction_id=cycle.predictions[0].hypothesis_id,
                 observed_outcome=response,
                 observed=False,
@@ -190,7 +189,7 @@ authority for value, safety, planning and external action.
                 provenance=("model_generation", EvidenceKind.BELIEF.value),
             )
         )
-        cycle.status = cycle.status.COMPLETED
+        cycle.status = CycleStatus.COMPLETED
 
         memory_path = self.memory.save(
             goal,
