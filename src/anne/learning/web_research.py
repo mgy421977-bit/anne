@@ -125,12 +125,21 @@ class WebResearcher:
     @classmethod
     def _is_relevant(cls, query: str, claim: str, title: str = "") -> bool:
         normalized_query = cls._normalize(query)
-        normalized_text = cls._normalize(f"{title} {claim}")
-        # Acronym queries require the acronym or a known expansion. This prevents
-        # unrelated words such as "GES" inside place/name results from passing.
+        raw_text = f"{title} {claim}"
+        normalized_text = cls._normalize(raw_text)
+
+        # Technical acronyms are case-sensitive in the source text. A title-case
+        # word such as "Bess" (the film/person/name) must not satisfy "BESS".
+        # Accept an exact uppercase acronym or at least two expansion terms.
         for acronym, aliases in cls._ALIASES.items():
             if re.search(rf"\b{re.escape(acronym)}\b", normalized_query):
-                if not any(re.search(rf"\b{re.escape(alias)}\b", normalized_text) for alias in aliases):
+                exact_acronym = bool(re.search(rf"\b{re.escape(acronym.upper())}\b", raw_text))
+                expansion_aliases = aliases - {acronym}
+                expansion_hits = sum(
+                    bool(re.search(rf"\b{re.escape(alias)}\b", normalized_text))
+                    for alias in expansion_aliases
+                )
+                if not exact_acronym and expansion_hits < 2:
                     return False
         return cls._relevance(query, claim, title) >= cls.minimum_relevance
 
@@ -198,8 +207,6 @@ class WebResearcher:
             return []
         evidence: list[EvidenceItem] = []
 
-        # Keep the original question as the primary search. Add domain expansion
-        # only for recognized technical acronyms; never broaden arbitrary words.
         queries = [query]
         normalized = self._normalize(query)
         if re.search(r"\bges\b", normalized):
@@ -218,7 +225,6 @@ class WebResearcher:
             except Exception:
                 pass
 
-        # Only fetch a summary for already relevant candidates.
         for item in list(evidence[:5]):
             if item.source != "Wikipedia (tr)":
                 continue
