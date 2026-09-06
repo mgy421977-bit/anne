@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
 
 from anne.mythos.engine import HypothesisCandidate, MitosEngine
 
@@ -68,7 +67,8 @@ class DevelopmentSupervisor:
 
     @staticmethod
     def promotion_allowed(
-        *, regression_passed: bool,
+        *,
+        regression_passed: bool,
         capability_passed: bool,
         sandbox_passed: bool,
         policy_passed: bool,
