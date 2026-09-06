@@ -75,6 +75,18 @@ class WebResearcher:
         "athena": {"athena", "anne", "ai", "yapay", "zeka"},
     }
 
+    # Acronym matches must be supported by an expansion term, not merely the
+    # acronym itself. This blocks title collisions such as "Young Bess" while
+    # still accepting pages that explain Battery Energy Storage System (BESS).
+    _ACRONYM_EXPANSIONS = {
+        "ges": {"güneş", "gunes", "solar", "fotovoltaik", "photovoltaic", "pv"},
+        "bess": {"batarya", "battery", "enerji", "energy", "depolama", "storage"},
+        "res": {"rüzgar", "ruzgar", "wind", "türbin", "turbin"},
+        "hes": {"hidroelektrik", "hydroelectric", "hidro"},
+        "epc": {"mühendislik", "muhendislik", "engineering", "procurement", "construction", "tedarik", "kurulum"},
+        "athena": {"yapay", "zeka", "artificial", "intelligence"},
+    }
+
     # Direct encyclopedia titles are a rescue path for acronyms whose search
     # engine results are noisy or empty. The page itself is still fetched from
     # the public web and must pass the same relevance gate before becoming evidence.
@@ -139,7 +151,10 @@ class WebResearcher:
         normalized_text = cls._normalize(f"{title} {claim}")
         for acronym, aliases in cls._ALIASES.items():
             if re.search(rf"\b{re.escape(acronym)}\b", normalized_query):
-                if not any(re.search(rf"\b{re.escape(alias)}\b", normalized_text) for alias in aliases):
+                expansion_terms = cls._ACRONYM_EXPANSIONS.get(acronym, aliases - {acronym})
+                # The acronym itself is intentionally excluded: "Young Bess"
+                # must not qualify for the technical query "BESS nedir?".
+                if not any(re.search(rf"\b{re.escape(alias)}\b", normalized_text) for alias in expansion_terms):
                     return False
         return cls._relevance(query, claim, title) >= cls.minimum_relevance
 
