@@ -62,7 +62,7 @@ class AnneTinker(tk.Tk):
         self.dev_tab = ttk.Frame(notebook, padding=8)
         self.config_tab = ttk.Frame(notebook, padding=8)
         notebook.add(self.chat_tab, text="Sohbet")
-        notebook.add(self.trace_tab, text="Cevap Silselesi")
+        notebook.add(self.trace_tab, text="Cevap Silsilesi")
         notebook.add(self.mitos_tab, text="MITOS / Keşif")
         notebook.add(self.dev_tab, text="Geliştir")
         notebook.add(self.config_tab, text="Bağlantılar")
@@ -87,13 +87,13 @@ class AnneTinker(tk.Tk):
         ttk.Button(buttons, text="Temizle", command=self._clear_input).pack(fill="x")
         ttk.Label(
             self.chat_tab,
-            text="Ctrl+Enter = gönder • Yerel motorlar önce çalışır • Cevap Silselesi sekmesinde yürütme izini görebilirsin.",
+            text="Ctrl+Enter = gönder • Yerel motorlar önce çalışır • Cevap Silsilesi sekmesinde yürütme izini görebilirsin.",
         ).pack(anchor="w", pady=(6, 0))
 
     def _build_trace(self) -> None:
         ttk.Label(
             self.trace_tab,
-            text="Cevap Silselesi — açıklanabilir yürütme izi (gizli düşünce değil)",
+            text="Cevap Silsilesi — açıklanabilir yürütme izi (gizli düşünce değil)",
             font=("Segoe UI", 11, "bold"),
         ).pack(anchor="w")
         self.trace = scrolledtext.ScrolledText(self.trace_tab, wrap="word", font=("Consolas", 10))
