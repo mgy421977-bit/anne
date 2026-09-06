@@ -75,7 +75,24 @@ class TurkishLanguageEngine:
             return "math"
         if self.greeting_learner.matches(normalized):
             return "greeting"
-        if normalized.endswith("?") or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ")):
+        if (
+            normalized.endswith("?")
+            or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ", "hangi "))
+            or any(
+                phrase in normalized
+                for phrase in (
+                    " nedir",
+                    " ne demek",
+                    " hakkında bilgi",
+                    " hakkında anlat",
+                    " açıkla",
+                    " anlatır mısın",
+                    " anlat",
+                    " ne işe yarar",
+                    " nasıl çalışır",
+                )
+            )
+        ):
             return "question"
         return "statement"
 
@@ -84,7 +101,7 @@ class TurkishLanguageEngine:
         for token in tokens:
             if token in {"ben", "sen", "o", "biz", "siz", "onlar"}:
                 roles[token] = "pronoun"
-            elif token in {"nasıl", "ne", "kaç", "kim", "neden", "nerede"}:
+            elif token in {"nasıl", "ne", "kaç", "kim", "neden", "nerede", "hangi"}:
                 roles[token] = "question_word"
         return roles
 
