@@ -2,8 +2,8 @@
 
 The token is read only from GITHUB_TOKEN and is never persisted by ANNE.
 Destructive operations require an explicit apply=True call and are limited to
-branches already merged into the configured base branch. Open PR head branches
-and the default branch are never candidates for deletion.
+branches that no longer contain commits absent from the configured base branch.
+Open PR head branches and the default branch are never candidates for deletion.
 """
 from __future__ import annotations
 
@@ -34,7 +34,11 @@ class GitHubMaintenance:
         request = Request(
             f"https://api.github.com/repos/{self.owner}/{self.repo}{path}",
             method=method,
-            headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {self.token}", "X-GitHub-Api-Version": "2022-11-28"},
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {self.token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
         )
         try:
             with urlopen(request, timeout=self.timeout) as response:
@@ -47,7 +51,12 @@ class GitHubMaintenance:
         repo = self._request("GET", "")
         default_branch = repo.get("default_branch", "main") if isinstance(repo, dict) else "main"
         branches = self._request("GET", "/branches?per_page=100")
-        protected = {default_branch, base_branch}
+        open_prs = self._request("GET", "/pulls?state=open&per_page=100")
+        open_heads = {
+            pr.get("head", {}).get("ref")
+            for pr in open_prs if isinstance(pr, dict)
+        }
+        protected = {default_branch, base_branch, *open_heads}
         candidates: list[str] = []
         for item in branches if isinstance(branches, list) else []:
             name = item.get("name")
