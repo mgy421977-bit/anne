@@ -17,6 +17,7 @@ import os
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from .evidence import EvidenceItem
@@ -46,10 +47,8 @@ class KnowledgeResolver:
         memory: KnowledgeMemory | None = None,
     ) -> None:
         self.web = web or WebResearcher()
-        runtime_dir = os.getenv("ANNE_RUNTIME_DIR", ".anne_runtime")
-        self.memory = memory or KnowledgeMemory(
-            __import__("pathlib").Path(runtime_dir) / "knowledge.json"
-        )
+        runtime_dir = Path(os.getenv("ANNE_RUNTIME_DIR", ".anne_runtime"))
+        self.memory = memory or KnowledgeMemory(runtime_dir / "knowledge.json")
 
     @staticmethod
     def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
@@ -86,7 +85,11 @@ class KnowledgeResolver:
                 ],
                 "temperature": 0.1,
             },
-            {"Authorization": f"Bearer {key}", "HTTP-Referer": "https://github.com/mgy421977-bit/anne", "X-Title": "ANNE AI"},
+            {
+                "Authorization": f"Bearer {key}",
+                "HTTP-Referer": "https://github.com/mgy421977-bit/anne",
+                "X-Title": "ANNE AI",
+            },
         )
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
         if not isinstance(content, str) or not content.strip():
@@ -106,7 +109,7 @@ class KnowledgeResolver:
             f"SORU:\n{question}\n\nWEB KANITLARI:\n{context or '(yok)'}"
         )
         url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{urllib.parse.quote(model, safe='')}:generateContent?key={urllib.parse.quote(key, safe='')}"
         )
         data = KnowledgeResolver._post_json(
@@ -146,8 +149,12 @@ class KnowledgeResolver:
                 if isinstance(item, dict)
             )
             return KnowledgeResolution(
-                str(cached["answer"]), tuple(trace), str(cached.get("provider", "memory")), evidence,
-                float(cached.get("confidence", 0.0)), True,
+                str(cached["answer"]),
+                tuple(trace),
+                str(cached.get("provider", "memory")),
+                evidence,
+                float(cached.get("confidence", 0.0)),
+                True,
             )
 
         trace.append("03 RESEARCH | Public web araştırması başlatıldı.")
@@ -174,7 +181,7 @@ class KnowledgeResolver:
                     }
                     for item in evidence
                 ]
-                record = self.memory.save(
+                self.memory.save(
                     question=question,
                     answer=answer,
                     evidence=record_evidence,
