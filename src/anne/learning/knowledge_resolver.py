@@ -13,6 +13,7 @@ from typing import Any
 from anne.core.evidence_fusion import fuse_evidence
 from anne.core.output_validator import OutputValidator
 from anne.core.source_intelligence import rank_evidence, requires_authority
+from anne.core.temporal_intelligence import apply_freshness
 from .evidence import EvidenceItem
 from .knowledge_memory import KnowledgeMemory
 from .web_research import WebResearcher
