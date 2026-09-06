@@ -142,15 +142,14 @@ authority for value, safety, planning and external action.
         if not response:
             raise RuntimeError("model returned an empty response")
 
-        cycle.predictions.append(
-            Prediction(
-                hypothesis_id=candidates[0].id,
-                expected_outcome=response,
-                probability=candidates[0].probability,
-                confidence=candidates[0].testability,
-                provenance=(candidates[0].id,),
-            )
+        prediction = Prediction(
+            hypothesis_id=candidates[0].id,
+            expected_outcome=response,
+            probability=candidates[0].probability,
+            confidence=candidates[0].testability,
+            provenance=(candidates[0].id,),
         )
+        cycle.add_prediction(prediction)
         cycle.plan = {"mode": "bounded_reasoning", "external_action": bool(action)}
         cycle.status = CycleStatus.PLANNED
 
@@ -182,20 +181,19 @@ authority for value, safety, planning and external action.
 
         cycle.record_outcome(
             Outcome(
-                prediction_id=cycle.predictions[0].hypothesis_id,
+                prediction_id=prediction.prediction_id,
                 observed_outcome=response,
                 observed=False,
                 source="model",
                 provenance=("model_generation", EvidenceKind.BELIEF.value),
             )
         )
-        cycle.status = CycleStatus.COMPLETED
 
         memory_path = self.memory.save(
             goal,
             response,
             "No new durable learning; no independently observed outcome yet.",
-            confidence=cycle.predictions[0].confidence,
+            confidence=prediction.confidence,
         )
         return RuntimeResult(
             cycle=cycle,
