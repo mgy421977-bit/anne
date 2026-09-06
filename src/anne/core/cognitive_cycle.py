@@ -53,6 +53,7 @@ class Prediction:
     confidence: float
     provenance: tuple[str, ...] = ()
     kind: EvidenceKind = EvidenceKind.PREDICTION
+    prediction_id: str = field(default_factory=lambda: f"pred_{uuid4().hex[:12]}")
 
 
 @dataclass(frozen=True)
