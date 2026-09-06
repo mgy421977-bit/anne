@@ -21,6 +21,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anne.language.tr.core import TurkishLanguageEngine
+from anne.learning.percentage import PercentageLearner
 from anne.math.engine import MathEngine
 from anne.runtime.supervisor import DevelopmentProposal, DevelopmentSupervisor
 from anne.weather.open_meteo import OpenMeteoWeather
@@ -41,6 +42,7 @@ class AnneTinker(tk.Tk):
         self.math = MathEngine()
         self.weather = OpenMeteoWeather()
         self.supervisor = DevelopmentSupervisor()
+        self.percentage_learner = PercentageLearner()
         self._build_ui()
         self._load_env_defaults()
         self._update_provider_fields()
@@ -59,16 +61,19 @@ class AnneTinker(tk.Tk):
         self.chat_tab = ttk.Frame(notebook, padding=8)
         self.trace_tab = ttk.Frame(notebook, padding=8)
         self.mitos_tab = ttk.Frame(notebook, padding=8)
+        self.learning_tab = ttk.Frame(notebook, padding=8)
         self.dev_tab = ttk.Frame(notebook, padding=8)
         self.config_tab = ttk.Frame(notebook, padding=8)
         notebook.add(self.chat_tab, text="Sohbet")
         notebook.add(self.trace_tab, text="Cevap Silsilesi")
         notebook.add(self.mitos_tab, text="MITOS / Keşif")
+        notebook.add(self.learning_tab, text="🧠 Öğrenme Lab")
         notebook.add(self.dev_tab, text="Geliştir")
         notebook.add(self.config_tab, text="Bağlantılar")
         self._build_chat()
         self._build_trace()
         self._build_mitos()
+        self._build_learning()
         self._build_development()
         self._build_config()
 
@@ -114,6 +119,24 @@ class AnneTinker(tk.Tk):
         self.mitos_output = scrolledtext.ScrolledText(self.mitos_tab, wrap="word", font=("Segoe UI", 10))
         self.mitos_output.pack(fill="both", expand=True)
         self.mitos_output.configure(state="disabled")
+
+    def _build_learning(self) -> None:
+        ttk.Label(
+            self.learning_tab,
+            text="🧠 Öğrenme Lab — kanıt → hipotez → deney → transfer → regression → sandbox",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w")
+        form = ttk.Frame(self.learning_tab)
+        form.pack(fill="x", pady=10)
+        self.learning_input = ttk.Entry(form)
+        self.learning_input.insert(0, "Örnek: 800'ün yüzde 15'i kaç?")
+        self.learning_input.pack(side="left", fill="x", expand=True)
+        ttk.Button(form, text="Öğrenmeyi Başlat", command=self.run_learning).pack(side="right", padx=(8, 0))
+        self.learning_status = ttk.Label(self.learning_tab, text="Status: READY • Capability: Turkish Percentage Reasoning")
+        self.learning_status.pack(anchor="w", pady=(0, 6))
+        self.learning_output = scrolledtext.ScrolledText(self.learning_tab, wrap="word", font=("Consolas", 10))
+        self.learning_output.pack(fill="both", expand=True)
+        self.learning_output.configure(state="disabled")
 
     def _build_development(self) -> None:
         ttk.Label(
@@ -207,7 +230,16 @@ class AnneTinker(tk.Tk):
             self.result_queue.put(("error", str(exc)))
 
     def _execute_local(self, user_input: str) -> tuple[str, list[str]]:
-        """Run deterministic local capabilities and return an auditable execution trace."""
+        """Run deterministic local capabilities and evidence-gated learning."""
+        if self.percentage_learner.matches(user_input):
+            result = self.percentage_learner.learn(user_input)
+            trace = list(result.trace)
+            if result.answer is not None:
+                trace.append(f"11 ANSWER | Sonuç = {result.answer}")
+                return f"Öğrenme adayı doğrulandı. Sonuç: {result.answer}", trace
+            trace.append("11 ANSWER | Güvenli transfer cevabı üretilemedi; öğrenme adayı korunuyor.")
+            return "Bu yüzde ifadesi için öğrenme adayı oluşturuldu ancak güvenli cevap üretilemedi.", trace
+
         analysis = self.language.analyze(user_input)
         trace = [
             "01 OBSERVE | Kullanıcı girdisi alındı.",
@@ -288,6 +320,44 @@ class AnneTinker(tk.Tk):
             )
         self._set_text(self.mitos_output, "\n".join(lines))
 
+    def run_learning(self) -> None:
+        question = self.learning_input.get().strip()
+        if not question:
+            return
+        self.learning_status.configure(text="Status: RESEARCHING • MITOS → Evidence → Experiment")
+        self._set_text(self.learning_output, "ANNE öğrenme döngüsünü başlatıyor…\nWeb evidence araştırılıyor; sonuçlar kanıt olarak işaretlenecek, FACT olarak değil.")
+        threading.Thread(target=self._learning_worker, args=(question,), daemon=True).start()
+
+    def _learning_worker(self, question: str) -> None:
+        try:
+            result = self.percentage_learner.learn(question)
+            lines = [
+                "🧠 LEARNING LAB",
+                "=" * 72,
+                f"Problem           : {result.question}",
+                f"Capability        : {result.candidate.capability_id}",
+                f"Hypothesis        : {result.candidate.hypothesis}",
+                f"Method            : {result.candidate.method}",
+                "",
+                "EXECUTION TRACE",
+                *result.trace,
+                "",
+                "GATE SUMMARY",
+                f"Tests             : {result.candidate.tests_passed}/{result.candidate.tests_total} ({result.candidate.test_accuracy:.0%})",
+                f"Transfer          : {'PASS' if result.candidate.transfer_passed else 'FAIL'}",
+                f"Regression        : {'PASS' if result.candidate.regression_passed else 'FAIL'}",
+                f"Sandbox           : {'PASS' if result.candidate.sandbox_passed else 'FAIL'}",
+                f"Confidence        : {result.candidate.confidence:.2f}",
+                f"Promotion ready   : {'YES' if result.candidate.promotion_ready() else 'NO'}",
+                "",
+                f"Answer            : {result.answer if result.answer is not None else 'NOT PROMOTED'}",
+                "",
+                "POLICY: Web evidence informs the candidate; production code is not rewritten automatically.",
+            ]
+            self.result_queue.put(("learning_ok", ("\n".join(lines), result)))
+        except Exception as exc:
+            self.result_queue.put(("learning_error", str(exc)))
+
     def run_development_check(self) -> None:
         goal = self.dev_goal.get().strip()
         proposals = self.supervisor.propose(goal, batch_size=1)
@@ -320,6 +390,15 @@ class AnneTinker(tk.Tk):
                     self._append("ANNE", answer)
                     self._set_text(self.trace, "\n".join(trace))
                     self.status.configure(text="LOCAL-FIRST • verified")
+                elif kind == "learning_ok":
+                    text, _result = payload  # type: ignore[misc]
+                    self._set_text(self.learning_output, text)
+                    self.learning_status.configure(text="Status: CANDIDATE EVALUATED • Production promotion remains gated")
+                    self.status.configure(text="LEARNING • candidate evaluated")
+                elif kind == "learning_error":
+                    self._set_text(self.learning_output, f"Learning error: {payload}")
+                    self.learning_status.configure(text="Status: ERROR • candidate not promoted")
+                    self.status.configure(text="Error")
                 else:
                     self._append("SYSTEM ERROR", str(payload))
                     self.status.configure(text="Error")
