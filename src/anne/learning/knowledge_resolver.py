@@ -100,35 +100,62 @@ class KnowledgeResolver:
         match = self._TERM_RE.match(user_input.strip())
         if not match:
             return None
-        left, right = match.groups()
-        if len(left.split()) > 8 or len(right.strip()) < 2 or not any(ch.isalpha() for ch in left):
+        left, right = (part.strip() for part in match.groups())
+        if len(left.split()) > 8 or len(right) < 2 or not any(ch.isalpha() for ch in left):
             return None
-        record = self.memory.save_term(term=left, meaning=right, source="user")
+        left_acronym = self._ACRONYM_RE.fullmatch(left)
+        right_acronym = self._ACRONYM_RE.fullmatch(right)
+        if right_acronym and not left_acronym:
+            term, meaning = right, left
+        else:
+            term, meaning = left, right
+        record = self.memory.save_term(term=term, meaning=meaning, source="user")
         trace = (
             "01 OBSERVE | Kullanıcı açık bir kavram eşlemesi verdi.",
-            f"02 LEARN | '{left.strip()}' = '{right.strip()}' algılandı.",
-            "03 MEMORY | Terminoloji kalıcı knowledge memory'ye kaydedildi.",
-            "04 VERIFY | Kullanıcı kaynağı; status=LEARNED_CANDIDATE; confidence=0.95.",
-            "05 ANSWER | Öğrenilen eşleştirme kabul edildi.",
+            f"02 LEARN | '{left}' = '{right}' algılandı.",
+            f"03 NORMALIZE | canonical term={term}; meaning={meaning}",
+            "04 MEMORY | Terminoloji kalıcı knowledge memory'ye kaydedildi.",
+            f"05 VERIFY | status=LEARNED_CANDIDATE; confidence={record['confidence']:.2f}; source=user.",
+            "06 ANSWER | Öğrenilen eşleştirme kabul edildi.",
         )
-        return KnowledgeResolution(f"Öğrendim: {left.strip()} = {right.strip()}", trace, "user", tuple(), float(record["confidence"]))
+        return KnowledgeResolution(f"Öğrendim: {left} = {right}", trace, "user", tuple(), float(record["confidence"]))
 
     def _term_answer(self, question: str) -> KnowledgeResolution | None:
-        candidates = self._ACRONYM_RE.findall(question.strip())
-        for term in candidates:
+        for term in self._ACRONYM_RE.findall(question.strip()):
             record = self.memory.get_term(term)
             if record and record.get("meaning"):
                 meaning = str(record["meaning"])
-                answer = f"{term}: {meaning}."
-                trace = (
-                    "03 MEMORY | Öğrenilmiş terminoloji eşleşmesi bulundu.",
-                    f"04 TERM | {term} = {meaning}",
-                    "05 VERIFY | Kayıt kullanıcı kaynağından gelen LEARNED_CANDIDATE.",
-                    "06 ROUTE | terminology memory → answer; web/API çağrısı yapılmadı.",
-                    "07 ANSWER | Yerel öğrenilmiş bilgi kullanıldı.",
+                return KnowledgeResolution(
+                    f"{term}: {meaning}.",
+                    (
+                        "03 MEMORY | Öğrenilmiş terminoloji eşleşmesi bulundu.",
+                        f"04 TERM | {term} = {meaning}",
+                        "05 VERIFY | Kayıt kullanıcı kaynağından gelen LEARNED_CANDIDATE.",
+                        "06 ROUTE | terminology memory → answer; web/API çağrısı yapılmadı.",
+                        "07 ANSWER | Yerel öğrenilmiş bilgi kullanıldı.",
+                    ),
+                    "user-memory", tuple(), float(record.get("confidence", 0.95)), True,
                 )
-                return KnowledgeResolution(answer, trace, "user-memory", tuple(), float(record.get("confidence", 0.95)), True)
         return None
+
+    def _cached_answer_is_relevant(self, question: str, cached: dict[str, Any], evidence: tuple[EvidenceItem, ...]) -> bool:
+        """Reject stale cached web answers that no longer match the question."""
+        provider = str(cached.get("provider", ""))
+        if provider not in {"web", "OpenRouter", "Gemini"}:
+            return True
+        if not evidence:
+            # External-model records without evidence are still usable only when
+            # there is no obvious acronym collision in the answer.
+            return not any(
+                term.lower() in {"ges", "bess", "res", "hes", "epc"} and
+                term.lower() not in str(cached.get("answer", "")).lower()
+                for term in self._ACRONYM_RE.findall(question)
+            )
+        relevant = [
+            item for item in evidence
+            if WebResearcher._is_relevant(question, item.claim, item.source)
+        ]
+        return bool(relevant)
 
     def resolve(self, question: str) -> KnowledgeResolution:
         trace = [
@@ -136,62 +163,57 @@ class KnowledgeResolver:
             "02 CAPABILITY CHECK | Yerel PROMOTED capability bulunamadı; knowledge memory kontrol ediliyor.",
         ]
 
-        # Terminology MUST precede cached question answers. A previous bad web
-        # answer (for example, GES -> Gesi Bağları) must never shadow a later,
-        # explicit user definition of the same technical term.
         term_hit = self._term_answer(question)
         if term_hit:
             return KnowledgeResolution(term_hit.answer, tuple(trace + list(term_hit.trace)), term_hit.provider, term_hit.evidence, term_hit.confidence, True)
 
-        # Explicit mappings are statements, not questions, and are handled by
-        # Tinker before this method. Keep this helper available for future callers.
         cached = self.memory.get(question)
         if cached and cached.get("answer"):
             evidence = tuple(
                 EvidenceItem(source=str(i.get("source", "memory")), claim=str(i.get("claim", "")), kind="web", provenance=str(i.get("provenance", "memory")), confidence=float(i.get("confidence", 0.0)))
                 for i in cached.get("evidence", []) if isinstance(i, dict)
             )
-            return KnowledgeResolution(str(cached["answer"]), tuple(trace + [
-                "03 MEMORY | Önceden araştırılmış bilgi kaydı bulundu.",
-                "04 ROUTE | persistent knowledge → answer",
-                "05 VERIFY | Kaynak/provenance korunuyor; yeni API çağrısı yapılmadı.",
-            ]), str(cached.get("provider", "memory")), evidence, float(cached.get("confidence", 0.0)), True)
+            if self._cached_answer_is_relevant(question, cached, evidence):
+                return KnowledgeResolution(str(cached["answer"]), tuple(trace + [
+                    "03 MEMORY | Önceden araştırılmış bilgi kaydı bulundu.",
+                    "04 ROUTE | persistent knowledge → answer",
+                    "05 VERIFY | Kaynak/provenance korunuyor; yeni API çağrısı yapılmadı.",
+                ]), str(cached.get("provider", "memory")), evidence, float(cached.get("confidence", 0.0)), True)
+            trace.append("03 MEMORY | Eski bilgi kaydı bulundu ancak soru ile ilgisiz; stale cache reddedildi.")
 
-        trace.append("03 RESEARCH | Public web araştırması başlatıldı.")
+        trace.append("04 RESEARCH | Public web araştırması başlatıldı.")
         evidence = self.web.research(question)
-        trace.append(f"04 WEB | evidence_items={len(evidence)}")
+        trace.append(f"05 WEB | evidence_items={len(evidence)}")
         for item in evidence[:5]:
-            trace.append(f"05 EVIDENCE | {item.source}: {item.claim[:220]}")
+            trace.append(f"06 EVIDENCE | {item.source}: {item.claim[:220]}")
         web_answer = self.web.answer(question, evidence)
         if web_answer:
             confidence = max(item.confidence for item in evidence)
             self._save_answer(question=question, answer=web_answer, evidence=evidence, provider="web", confidence=confidence)
             return KnowledgeResolution(web_answer, tuple(trace + [
-                "06 ROUTE | Public web evidence yeterli; harici model çağrısı gerekmiyor.",
-                "07 PROVIDER | web evidence → bounded extractive answer.",
-                "08 ANLA | Web kanıtı knowledge memory'ye dönüştürülüyor.",
-                "09 MEMORY | Kaynak/provenance ile kaydedildi.",
-                "10 VERIFY | FACT değil LEARNED_CANDIDATE.",
-                f"11 ANSWER | provider=web; confidence={confidence:.2f}",
+                "07 ROUTE | Public web evidence yeterli; harici model çağrısı gerekmiyor.",
+                "08 PROVIDER | web evidence → bounded extractive answer.",
+                "09 ANLA | Web kanıtı knowledge memory'ye dönüştürülüyor.",
+                "10 MEMORY | Kaynak/provenance ile kaydedildi.",
+                "11 VERIFY | FACT değil LEARNED_CANDIDATE.",
             ]), "web", tuple(evidence), confidence)
 
         for provider_name, provider in (("OpenRouter", self._openrouter), ("Gemini", self._gemini)):
-            trace.append(f"06 ROUTE | Web sonuç çıkaramadı; {provider_name} fallback hazırlanıyor.")
+            trace.append(f"07 ROUTE | Web sonuç çıkaramadı; {provider_name} fallback hazırlanıyor.")
             try:
                 answer = provider(question, evidence)
                 confidence = 0.70 if evidence else 0.55
                 self._save_answer(question=question, answer=answer, evidence=evidence, provider=provider_name, confidence=confidence)
                 return KnowledgeResolution(answer, tuple(trace + [
-                    f"07 PROVIDER | {provider_name} cevap üretti.",
-                    "08 ANLA | Dış cevap knowledge memory'ye dönüştürülüyor.",
-                    "09 MEMORY | Kaynak/provenance ile kaydedildi.",
-                    "10 VERIFY | FACT değil LEARNED_CANDIDATE.",
-                    f"11 ANSWER | provider={provider_name}; confidence={confidence:.2f}",
+                    f"08 PROVIDER | {provider_name} cevap üretti.",
+                    "09 ANLA | Dış cevap knowledge memory'ye dönüştürülüyor.",
+                    "10 MEMORY | Kaynak/provenance ile kaydedildi.",
+                    "11 VERIFY | FACT değil LEARNED_CANDIDATE.",
                 ]), provider_name, tuple(evidence), confidence)
             except Exception as exc:
-                trace.append(f"07 PROVIDER | {provider_name} kullanılamadı: {exc}")
+                trace.append(f"08 PROVIDER | {provider_name} kullanılamadı: {exc}")
 
         return KnowledgeResolution(None, tuple(trace + [
-            "08 FAIL-CLOSED | Web, OpenRouter ve Gemini cevap veremedi; cevap uydurulmadı.",
+            "09 FAIL-CLOSED | Web, OpenRouter ve Gemini cevap veremedi; cevap uydurulmadı.",
             "11 ANSWER | Güvenilir cevap üretilemedi.",
         ]), None, tuple(evidence), 0.0)
