@@ -42,7 +42,11 @@ class AnnePipeline:
         lowered = raw_input.lower()
         if any(w in lowered for w in ["conflict", "çatışma", "savaş", "vs", "karşı"]):
             state.input_type = "conflict"
-        elif any(w in lowered for w in ["?", "neden", "nasıl", "ne", "why", "how"]):
+        elif any(w in lowered for w in [
+            "?", "neden", "nasıl", "ne", "hangi", "why", "how", "which",
+            "karşılaştır", "karşılaştırma", "avantaj", "dezavantaj", "koşullarda",
+            "güncel", "teşvik", "finansman", "değerlendir", "compare",
+        ]):
             state.input_type = "query"
         elif any(w in lowered for w in ["zarar", "tehlike", "risk", "harm", "danger"]):
             state.input_type = "risk"
