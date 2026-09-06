@@ -72,6 +72,8 @@ class EvidenceItem:
     def validate(self) -> None:
         if not self.claim.strip() or not self.source.strip():
             raise ValueError("claim and source are required")
+        if not self.provenance.strip():
+            raise ValueError("provenance is required")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
 
@@ -114,6 +116,12 @@ class ResearchAgent:
 
 
 @dataclass
+class Reservation:
+    mission: ResearchMission
+    released: bool = False
+
+
+@dataclass
 class ResourceGovernor:
     max_agents: int = 8
     max_total_searches: int = 200
@@ -124,23 +132,29 @@ class ResourceGovernor:
     compute_reserved: float = 0.0
     runtime_reserved: int = 0
 
-    def reserve(self, mission: ResearchMission) -> bool:
+    def reserve(self, mission: ResearchMission) -> Reservation | None:
         mission.validate()
         if self.active_agents + 1 > self.max_agents:
-            return False
+            return None
         if self.searches_reserved + mission.search_budget > self.max_total_searches:
-            return False
+            return None
         if self.compute_reserved + mission.compute_budget > self.max_total_compute:
-            return False
+            return None
         if self.runtime_reserved + mission.runtime_seconds > self.max_total_runtime_seconds:
-            return False
+            return None
         self.active_agents += 1
         self.searches_reserved += mission.search_budget
         self.compute_reserved += mission.compute_budget
         self.runtime_reserved += mission.runtime_seconds
-        return True
+        return Reservation(mission)
 
-    def release(self, mission: ResearchMission) -> None:
+    def release(self, reservation: Reservation) -> None:
+        if not isinstance(reservation, Reservation):
+            raise TypeError("release requires a Reservation")
+        if reservation.released:
+            raise RuntimeError("reservation was already released")
+        reservation.released = True
+        mission = reservation.mission
         self.active_agents = max(0, self.active_agents - 1)
         self.searches_reserved = max(0, self.searches_reserved - mission.search_budget)
         self.compute_reserved = max(0.0, self.compute_reserved - mission.compute_budget)

@@ -28,12 +28,19 @@ class Authorization:
     policy_version: str = "v1"
 
 
+@dataclass
 class AgencyGate:
     """Fail-closed action gate.
 
     MITOS proposals are never sufficient authorization. Callers must provide
     an explicit policy decision before an external action is permitted.
     """
+
+    review_risk_threshold: float = 0.8
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.review_risk_threshold <= 1.0:
+            raise ValueError("review_risk_threshold must be in [0, 1]")
 
     def authorize(
         self,
@@ -48,7 +55,7 @@ class AgencyGate:
             return Authorization(ActionDecision.DENY, "safety policy rejected action")
         if not proposal.provenance:
             return Authorization(ActionDecision.DENY, "action lacks provenance")
-        if proposal.risk >= 0.8 or not proposal.reversible:
+        if proposal.risk >= self.review_risk_threshold or not proposal.reversible:
             return Authorization(
                 ActionDecision.REVIEW,
                 "high-risk or irreversible action requires review",
