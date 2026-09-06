@@ -17,6 +17,7 @@ from anne.core.temporal_intelligence import apply_freshness
 from .evidence import EvidenceItem
 from .knowledge_memory import KnowledgeMemory
 from .web_research import WebResearcher
+from .web_fallback import research_fallback
 
 
 @dataclass(frozen=True)
@@ -93,9 +94,6 @@ class KnowledgeResolver:
         self.memory.save(question=question, answer=answer, evidence=self._saveable_evidence(evidence), provider=provider, confidence=confidence)
 
     def _term_answer(self, question: str) -> KnowledgeResolution | None:
-        # Terminology memory is a shortcut only for standalone definition queries.
-        # A complex question containing an acronym (e.g. GES + incentives) must
-        # continue through public-web research instead of being truncated to the acronym.
         if not self._TERM_QUERY_RE.match(question):
             return None
         term = self._ACRONYM_RE.search(question.strip())
@@ -152,6 +150,12 @@ class KnowledgeResolver:
         authority = requires_authority(question)
         trace.append(f"04 RESEARCH | Public web araştırması başlatıldı; authority_required={authority}.")
         evidence = rank_evidence(self.web.research(question), authority_required=authority)
+        if len(evidence) < 2:
+            fallback_evidence = research_fallback(question)
+            before = len(evidence)
+            evidence = evidence + [item for item in fallback_evidence if item.claim not in {old.claim for old in evidence}]
+            evidence = rank_evidence(evidence, authority_required=authority)
+            trace.append(f"04B WEB FALLBACK | primary={before}; broad_retrieval={len(fallback_evidence)}; merged={len(evidence)}.")
         temporal = apply_freshness(question, evidence)
         trace.append(f"05 TEMPORAL | time_sensitive={temporal.time_sensitive}; dated={temporal.dated_count}; stale={temporal.stale_count}; freshness={temporal.freshness_confidence:.2f}; status={temporal.reason}.")
         fusion = fuse_evidence(temporal.usable if temporal.time_sensitive else evidence, question=question, authority_required=authority)
