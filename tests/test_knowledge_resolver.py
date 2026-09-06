@@ -19,6 +19,16 @@ class StubWeb:
             )
         ]
 
+    @staticmethod
+    def answer(question: str, evidence):
+        return None
+
+
+class AnsweringStubWeb(StubWeb):
+    @staticmethod
+    def answer(question: str, evidence):
+        return "Web-derived answer."
+
 
 def test_openrouter_is_first_provider_and_answer_is_saved(tmp_path: Path, monkeypatch) -> None:
     memory = KnowledgeMemory(tmp_path / "knowledge.json")
@@ -56,6 +66,20 @@ def test_gemini_is_second_fallback(tmp_path: Path, monkeypatch) -> None:
     assert result.answer == "Gemini answer"
     assert result.provider == "Gemini"
     assert calls == ["openrouter", "gemini"]
+
+
+def test_sufficient_web_evidence_answers_before_provider(tmp_path: Path, monkeypatch) -> None:
+    memory = KnowledgeMemory(tmp_path / "knowledge.json")
+    resolver = KnowledgeResolver(web=AnsweringStubWeb(), memory=memory)
+
+    monkeypatch.setattr(resolver, "_openrouter", lambda question, evidence: (_ for _ in ()).throw(RuntimeError("must not run")))
+    monkeypatch.setattr(resolver, "_gemini", lambda question, evidence: (_ for _ in ()).throw(RuntimeError("must not run")))
+
+    result = resolver.resolve("GES nedir?")
+
+    assert result.answer == "Web-derived answer."
+    assert result.provider == "web"
+    assert result.confidence == 0.9
 
 
 def test_existing_knowledge_is_reused_without_provider(tmp_path: Path) -> None:
