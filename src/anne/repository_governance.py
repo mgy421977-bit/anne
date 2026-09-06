@@ -1,4 +1,4 @@
-"""Repository self-governance primitives for ANNE."""
+"""Evidence-gated repository self-governance for ANNE."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,6 +41,10 @@ class BranchFinding:
     confidence: float
     reasons: tuple[str, ...]
 
+    @property
+    def destructive(self) -> bool:
+        return self.action in {BranchAction.ARCHIVE, BranchAction.DELETE}
+
 
 @dataclass(frozen=True)
 class BranchPolicy:
@@ -49,7 +53,7 @@ class BranchPolicy:
 
 
 class RepositoryGovernor:
-    """Fail-closed policy engine for repository branch lifecycle decisions."""
+    """Fail-closed policy engine; it evaluates but never performs Git operations."""
 
     def __init__(self, policy: BranchPolicy | None = None) -> None:
         self.policy = policy or BranchPolicy()
@@ -83,7 +87,11 @@ class RepositoryGovernor:
         if self.policy.require_preserved_copy and not evidence.preserved_elsewhere:
             return BranchFinding(BranchAction.ARCHIVE, BranchRisk.HIGH, 0.95, ("duplicate candidate lacks a preserved copy",))
 
-        reasons = [f"duplicate of {evidence.duplicate_of}"]
+        confidence = 1.0
+        if confidence < self.policy.min_delete_confidence:
+            return BranchFinding(BranchAction.REVIEW, BranchRisk.MEDIUM, confidence, ("delete confidence below policy threshold",))
+
+        reasons = [f"duplicate of {evidence.duplicate_of}", "preserved elsewhere"]
         if evidence.last_activity_days is not None:
             reasons.append(f"inactive for {evidence.last_activity_days} days")
-        return BranchFinding(BranchAction.DELETE, BranchRisk.LOW, 1.0, tuple(reasons))
+        return BranchFinding(BranchAction.DELETE, BranchRisk.LOW, confidence, tuple(reasons))
