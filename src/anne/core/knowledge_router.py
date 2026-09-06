@@ -6,9 +6,11 @@ the routing decision explicit at the cognitive boundary.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from anne.learning.knowledge_resolver import KnowledgeResolution, KnowledgeResolver
+from anne.learning.reliable_web import ReliableWebResearcher
 
 
 @dataclass(frozen=True)
@@ -19,11 +21,31 @@ class KnowledgeRoute:
     resolution: KnowledgeResolution
 
 
+class _ResearchAwareResolver(KnowledgeResolver):
+    """Keep terminology memory from hijacking multi-part questions."""
+
+    _COMPLEX_MARKERS = (
+        "?", "hangi", "nasıl", "neden", "karşılaştır", "avantaj", "dezavantaj",
+        "koşullarda", "seçenek", "güncel", "teşvik", "finansman", "what", "how", "why",
+        "compare", "which",
+    )
+
+    def __init__(self) -> None:
+        super().__init__(web=ReliableWebResearcher())
+
+    def _term_answer(self, question: str) -> KnowledgeResolution | None:
+        normalized = question.strip().lower()
+        tokens = re.findall(r"\b[\wÇĞİÖŞÜçğıöşü%+-]+\b", normalized)
+        if len(tokens) > 5 or any(marker in normalized for marker in self._COMPLEX_MARKERS):
+            return None
+        return super()._term_answer(question)
+
+
 class KnowledgeRouter:
     """Route questions without creating domain-specific knowledge branches."""
 
     def __init__(self, resolver: KnowledgeResolver | None = None) -> None:
-        self.resolver = resolver or KnowledgeResolver()
+        self.resolver = resolver or _ResearchAwareResolver()
 
     def resolve(self, question: str) -> KnowledgeRoute:
         if not question.strip():
