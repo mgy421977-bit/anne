@@ -46,11 +46,21 @@ def _similarity(a: str, b: str) -> float:
 
 def _contradicts(a: str, b: str) -> bool:
     left, right = (a or "").lower(), (b or "").lower()
-    pairs = ((" not ", " is "), (" no ", " yes "), ("false", "true"),
-             ("impossible", "possible"), ("cannot", "can"), ("yok", "var"),
-             ("değil", "dir"), ("olamaz", "olabilir"))
-    return any((x in f" {left} " and y in f" {right} ") or
-               (y in f" {left} " and x in f" {right} ") for x, y in pairs)
+    pairs = (
+        (" not ", " is "), (" no ", " yes "), ("false", "true"),
+        ("impossible", "possible"), ("cannot", "can"), ("yok", "var"),
+        ("değil", "dir"), ("olamaz", "olabilir"),
+        ("çalışmaz", "çalışır"), ("çalışmıyor", "çalışıyor"),
+        ("desteklenmez", "desteklenir"), ("desteklenmiyor", "destekleniyor"),
+    )
+    normalized_pairs = []
+    for x, y in pairs:
+        nx = x.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
+        ny = y.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
+        normalized_pairs.append((nx, ny))
+    normalized_left = f" {left.replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')} "
+    normalized_right = f" {right.replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')} "
+    return any((x in normalized_left and y in normalized_right) or (y in normalized_left and x in normalized_right) for x, y in normalized_pairs)
 
 
 def fuse_evidence(items: list[EvidenceItem], *, authority_required: bool = False,
