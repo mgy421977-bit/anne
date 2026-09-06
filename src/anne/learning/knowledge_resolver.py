@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from anne.core.evidence_fusion import fuse_evidence
 from anne.core.output_validator import OutputValidator
 from anne.core.source_intelligence import rank_evidence, requires_authority
 from .evidence import EvidenceItem
@@ -158,17 +159,19 @@ class KnowledgeResolver:
         authority = requires_authority(question)
         trace.append(f"04 RESEARCH | Public web araştırması başlatıldı; authority_required={authority}.")
         evidence = rank_evidence(self.web.research(question), authority_required=authority)
-        trace.append(f"05 WEB | ranked_evidence_items={len(evidence)}")
-        for item in evidence[:5]:
+        fusion = fuse_evidence(evidence, authority_required=authority)
+        trace.append(f"05 FUSION | support={fusion.support_count}; independent={fusion.independent_sources}; contradictions={fusion.contradiction_count}; confidence={fusion.confidence:.2f}; status={fusion.reason}.")
+        for item in fusion.selected[:5]:
             trace.append(f"06 EVIDENCE | {item.source}: {item.claim[:220]}")
-        web_answer = self.web.answer(question, evidence)
+
+        web_answer = self.web.answer(question, list(fusion.selected))
         if web_answer:
             ok, score, reason = self._validate_answer(question, web_answer)
-            if ok:
-                confidence = min(max(item.confidence for item in evidence), score) if evidence else score
-                self._save_answer(question=question, answer=web_answer, evidence=evidence, provider="web", confidence=confidence)
-                return KnowledgeResolution(web_answer, tuple(trace + ["07 ROUTE | Public web evidence yeterli; harici model çağrısı gerekmiyor.", f"08 VALIDATE | web answer={reason}; score={score:.2f}", "09 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), "web", tuple(evidence), confidence)
-            trace.append(f"07 VALIDATE | web answer rejected: {reason}; score={score:.2f}")
+            if ok and fusion.sufficient:
+                confidence = min(fusion.confidence, score)
+                self._save_answer(question=question, answer=web_answer, evidence=list(fusion.selected), provider="web", confidence=confidence)
+                return KnowledgeResolution(web_answer, tuple(trace + ["07 ROUTE | Evidence Fusion yeterli; harici model çağrısı gerekmiyor.", f"08 VALIDATE | web answer={reason}; score={score:.2f}", "09 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), "web", tuple(fusion.selected), confidence)
+            trace.append(f"07 WEB | answer rejected or fusion insufficient; validation={reason}; fusion={fusion.reason}.")
 
         # Deliberately sequential: at most ONE external provider request is made.
         primary = os.getenv("ANNE_PRIMARY_PROVIDER", "OpenRouter").strip().lower()
@@ -178,27 +181,28 @@ class KnowledgeResolver:
         provider_name, provider = providers[0]
         fallback_name, fallback = providers[1]
         trace.append(f"08 PROVIDER | primary={provider_name}; exactly one provider is attempted before fallback.")
+        provider_evidence = list(fusion.selected) if fusion.selected else evidence
         try:
-            answer = provider(question, evidence)
+            answer = provider(question, provider_evidence)
             ok, score, reason = self._validate_answer(question, answer)
             if ok:
-                confidence = min(0.70 if evidence else 0.55, score)
-                self._save_answer(question=question, answer=answer, evidence=evidence, provider=provider_name, confidence=confidence)
-                return KnowledgeResolution(answer, tuple(trace + [f"09 PROVIDER | {provider_name} cevap üretti ve doğrulandı.", f"10 VALIDATE | score={score:.2f}; reason={reason}", "11 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), provider_name, tuple(evidence), confidence)
+                confidence = min(fusion.confidence if fusion.selected else 0.55, score)
+                self._save_answer(question=question, answer=answer, evidence=provider_evidence, provider=provider_name, confidence=confidence)
+                return KnowledgeResolution(answer, tuple(trace + [f"09 PROVIDER | {provider_name} cevap üretti ve doğrulandı.", f"10 VALIDATE | score={score:.2f}; reason={reason}", "11 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), provider_name, tuple(provider_evidence), confidence)
             trace.append(f"09 VALIDATE | {provider_name} output rejected: {reason}; score={score:.2f}")
         except Exception as exc:
             trace.append(f"09 PROVIDER | {provider_name} kullanılamadı: {exc}")
 
         trace.append(f"10 PROVIDER | {provider_name} başarısız; fallback={fallback_name} şimdi deneniyor.")
         try:
-            answer = fallback(question, evidence)
+            answer = fallback(question, provider_evidence)
             ok, score, reason = self._validate_answer(question, answer)
             if ok:
-                confidence = min(0.70 if evidence else 0.55, score)
-                self._save_answer(question=question, answer=answer, evidence=evidence, provider=fallback_name, confidence=confidence)
-                return KnowledgeResolution(answer, tuple(trace + [f"11 PROVIDER | {fallback_name} cevap üretti ve doğrulandı.", f"12 VALIDATE | score={score:.2f}; reason={reason}", "13 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), fallback_name, tuple(evidence), confidence)
+                confidence = min(fusion.confidence if fusion.selected else 0.55, score)
+                self._save_answer(question=question, answer=answer, evidence=provider_evidence, provider=fallback_name, confidence=confidence)
+                return KnowledgeResolution(answer, tuple(trace + [f"11 PROVIDER | {fallback_name} cevap üretti ve doğrulandı.", f"12 VALIDATE | score={score:.2f}; reason={reason}", "13 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), fallback_name, tuple(provider_evidence), confidence)
             trace.append(f"12 VALIDATE | {fallback_name} output rejected: {reason}; score={score:.2f}")
         except Exception as exc:
             trace.append(f"12 PROVIDER | {fallback_name} kullanılamadı: {exc}")
 
-        return KnowledgeResolution(None, tuple(trace + ["13 FAIL-CLOSED | Web ve sıralı provider fallback'leri cevap veremedi; cevap uydurulmadı.", "14 ANSWER | Güvenilir cevap üretilemedi."]), None, tuple(evidence), 0.0)
+        return KnowledgeResolution(None, tuple(trace + ["13 FAIL-CLOSED | Web ve sıralı provider fallback'leri cevap veremedi; cevap uydurulmadı.", "14 ANSWER | Güvenilir cevap üretilemedi."]), None, tuple(provider_evidence), 0.0)
