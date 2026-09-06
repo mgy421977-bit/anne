@@ -6,6 +6,7 @@ into facts. Network failures are non-fatal and leave the candidate unpromoted.
 from __future__ import annotations
 
 import json
+import re
 import urllib.parse
 import urllib.request
 
@@ -22,6 +23,12 @@ class WebResearcher:
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
+    @staticmethod
+    def _clean_html(text: str) -> str:
+        """Remove search-result markup before evidence reaches the audit trace."""
+        text = re.sub(r"<[^>]+>", "", text)
+        return re.sub(r"\s+", " ", text).strip()
+
     def research(self, query: str) -> list[EvidenceItem]:
         evidence: list[EvidenceItem] = []
         encoded = urllib.parse.quote(query)
@@ -34,8 +41,8 @@ class WebResearcher:
             )
             data = self._get_json(url)
             for item in data.get("query", {}).get("search", []):
-                title = str(item.get("title", ""))
-                snippet = str(item.get("snippet", ""))
+                title = self._clean_html(str(item.get("title", "")))
+                snippet = self._clean_html(str(item.get("snippet", "")))
                 if title:
                     evidence.append(
                         EvidenceItem(
@@ -53,7 +60,7 @@ class WebResearcher:
         try:
             url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_html=1"
             data = self._get_json(url)
-            abstract = str(data.get("AbstractText", "")).strip()
+            abstract = self._clean_html(str(data.get("AbstractText", "")))
             if abstract:
                 evidence.append(
                     EvidenceItem(
