@@ -67,16 +67,21 @@ def logical_coherence(text: str) -> float:
     if "never melt" in t and "melt" in t:
         return 0.0
 
+    # Word-boundary aware: "impossible" must not match as "possible".
+    def _has_word(word: str) -> bool:
+        return re.search(rf"(?i)\b{re.escape(word)}\b", t) is not None
+
     pairs = [
         ("never", "always"),
         ("true", "false"),
         ("impossible", "possible"),
-        ("cannot", "can always"),
         ("zero", "infinite"),
     ]
     for a, b in pairs:
-        if a in t and b in t:
+        if _has_word(a) and _has_word(b):
             return 0.0
+    if _has_word("cannot") and re.search(r"(?i)\bcan always\b", t):
+        return 0.0
 
     factoid_penalties = [
         ("capital of france is berlin", 0.2),
