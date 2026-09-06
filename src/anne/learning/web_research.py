@@ -14,7 +14,9 @@ from html.parser import HTMLParser
 from .evidence import EvidenceItem
 
 
-class _DuckDuckGoParser(HTMLParser):
+class _SearchParser(HTMLParser):
+    """Small parser shared by public HTML search fallbacks."""
+
     def __init__(self) -> None:
         super().__init__()
         self.results: list[tuple[str, str, str]] = []
@@ -27,11 +29,12 @@ class _DuckDuckGoParser(HTMLParser):
         attributes = dict(attrs)
         classes = attributes.get("class") or ""
         href = attributes.get("href") or ""
-        if tag == "a" and "result__a" in classes:
+        if tag == "a" and ("result__a" in classes or "b_algo" in classes):
             self._title = ""
             self._href = href
+            self._snippet = ""
             self._mode = "title"
-        elif "result__snippet" in classes:
+        elif "result__snippet" in classes or "b_caption" in classes:
             self._snippet = ""
             self._mode = "snippet"
 
@@ -58,7 +61,7 @@ class WebResearcher:
     """Generic public-web retrieval with conservative evidence filtering."""
 
     timeout = 8.0
-    minimum_relevance = 0.28
+    minimum_relevance = 0.20
     max_evidence = 8
     _ACRONYM_EXPANSIONS: dict[str, set[str]] = {}
 
@@ -67,16 +70,24 @@ class WebResearcher:
         "nedir", "nasıl", "neden", "ne", "hangi", "hakkında", "bilgi",
         "anlat", "açıkla", "mı", "mi", "mu", "mü", "the", "and", "what",
         "how", "why", "about", "is", "are", "a", "an", "of", "to", "in",
+        "da", "de", "daha", "en", "hangi", "açısından", "açısından", "için",
     }
     _OFFICIAL_QUERY_MARKERS = {
-        "destek", "destekleri", "teşvik", "teşvikleri", "hibe", "hibe", "mevzuat",
+        "destek", "destekleri", "teşvik", "teşvikleri", "hibe", "mevzuat",
         "yönetmelik", "kanun", "başvuru", "devlet", "kamu", "resmi", "resmî",
         "2026", "2025", "2027", "epdk", "tkdk", "kosgeb", "bakanlık",
     }
 
     @staticmethod
     def _get_text(url: str) -> str:
-        request = urllib.request.Request(url, headers={"User-Agent": "ANNE-AI/0.4 (+generic-public-web-research)"})
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ANNE-AI/0.5",
+                "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
+                "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.7",
+            },
+        )
         with urllib.request.urlopen(request, timeout=WebResearcher.timeout) as response:
             return response.read().decode("utf-8", errors="replace")
 
@@ -102,9 +113,31 @@ class WebResearcher:
         return {token for token in cls._normalize(text).split() if len(token) > 1 and token not in cls._STOPWORDS}
 
     @classmethod
+    def _topic_queries(cls, query: str) -> list[str]:
+        """Create compact retrieval queries so long natural questions still retrieve evidence."""
+        tokens = list(cls._tokens(query))
+        if not tokens:
+            return []
+        priority = []
+        normalized = cls._normalize(query)
+        for token in tokens:
+            if token in {"2026", "2027", "kosgeb", "epdk", "tkdk", "karbon", "ges", "depolama", "batarya", "verimlilik", "finansman", "tesvik", "destek", "sanayi", "enerji"}:
+                priority.append(token)
+        for token in tokens:
+            if token not in priority:
+                priority.append(token)
+        compact = " ".join(priority[:8])
+        queries = [compact]
+        if "karbon" in normalized and "enerji" in normalized:
+            queries.append("enerji karbon azaltimi sanayi 2026")
+        if "ges" in normalized and "depolama" in normalized:
+            queries.append("GES batarya depolama sanayi 2026")
+        return list(dict.fromkeys(q for q in queries if q.strip()))
+
+    @classmethod
     def _query_variants(cls, query: str) -> list[str]:
         clean = re.sub(r"[?!.]+$", "", query.strip()).strip()
-        variants = [clean]
+        variants = [clean, *cls._topic_queries(clean)]
         normalized = cls._normalize(clean)
         if normalized and normalized != clean.lower():
             variants.append(normalized)
@@ -122,11 +155,11 @@ class WebResearcher:
             if subject:
                 variants.extend([subject, f"{subject} how it works"])
 
-        # For policy/support questions, deliberately add an official-source query.
-        # This is a retrieval preference, not a hard-coded answer or domain fact.
         if cls._tokens(query) & cls._OFFICIAL_QUERY_MARKERS:
             variants.append(f"{clean} site:gov.tr")
             variants.append(f"{clean} site:gov.tr filetype:pdf")
+            for topic in cls._topic_queries(clean)[:2]:
+                variants.append(f"{topic} site:gov.tr")
 
         result: list[str] = []
         seen: set[str] = set()
@@ -135,7 +168,7 @@ class WebResearcher:
             if item and item.lower() not in seen:
                 seen.add(item.lower())
                 result.append(item)
-        return result[:6]
+        return result[:10]
 
     @classmethod
     def _acronym_token(cls, query: str) -> str | None:
@@ -146,7 +179,6 @@ class WebResearcher:
 
     @classmethod
     def _acronym_has_initialism_expansion(cls, acronym: str, text: str) -> bool:
-        """Recognize generic forms such as 'Battery Energy Storage System (BESS)'."""
         words = [w for w in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]{2,}", text) if cls._normalize(w) not in cls._STOPWORDS]
         target = cls._normalize(acronym)
         if not target or len(target) < 2:
@@ -168,7 +200,6 @@ class WebResearcher:
         if title_text and re.match(rf"^{re.escape(title_text)}\s*:\s*", body, flags=re.I):
             body = re.sub(rf"^{re.escape(title_text)}\s*:\s*", "", body, count=1, flags=re.I)
         full_text = f"{title_text} {body}"
-        token = re.escape(acronym)
         normalized_full = cls._normalize(full_text)
         disambiguation_patterns = (
             r"\bmay refer to\b", r"\blook up .*? in (?:the )?free dictionary\b",
@@ -177,7 +208,7 @@ class WebResearcher:
         )
         if any(re.search(pattern, normalized_full, flags=re.I) for pattern in disambiguation_patterns):
             return False
-
+        token = re.escape(acronym)
         expansion_patterns = (
             rf"\b{token}\b\s+(?:stands?\s+for|means|refers?\s+to)\b",
             rf"\b{token}\b\s+(?:is|are)\s+(?:an?|the)\b",
@@ -187,7 +218,6 @@ class WebResearcher:
             return True
         if cls._acronym_has_initialism_expansion(acronym, full_text):
             return True
-
         normalized_body = cls._normalize(body)
         normalized_token = cls._normalize(acronym)
         occurrences = len(re.findall(rf"\b{re.escape(normalized_token)}\b", normalized_body))
@@ -262,7 +292,7 @@ class WebResearcher:
     def _duckduckgo_search(self, query: str) -> list[EvidenceItem]:
         encoded = urllib.parse.quote_plus(query)
         url = f"https://html.duckduckgo.com/html/?q={encoded}"
-        parser = _DuckDuckGoParser()
+        parser = _SearchParser()
         parser.feed(self._get_text(url))
         items: list[EvidenceItem] = []
         for title, href, snippet in parser.results[:12]:
@@ -274,6 +304,24 @@ class WebResearcher:
             if re.search(r"\.gov\.tr(?:/|$)", href or "", flags=re.I):
                 confidence = min(0.98, confidence + 0.12)
             items.append(EvidenceItem(source="DuckDuckGo Web Search", claim=claim[:2200], kind="web", provenance=href or url, confidence=confidence))
+        return items
+
+    def _bing_search(self, query: str) -> list[EvidenceItem]:
+        """HTML fallback for environments where DuckDuckGo is unavailable."""
+        encoded = urllib.parse.quote_plus(query)
+        url = f"https://www.bing.com/search?q={encoded}&count=10"
+        parser = _SearchParser()
+        parser.feed(self._get_text(url))
+        items: list[EvidenceItem] = []
+        for title, href, snippet in parser.results[:12]:
+            claim = f"{title}: {snippet}" if snippet else title
+            if not self._is_relevant(query, claim, title):
+                continue
+            score = self._relevance(query, claim, title)
+            confidence = min(0.86, 0.45 + score * 0.41)
+            if re.search(r"\.gov\.tr(?:/|$)", href or "", flags=re.I):
+                confidence = min(0.99, confidence + 0.12)
+            items.append(EvidenceItem(source="Bing Web Search", claim=claim[:2200], kind="web", provenance=href or url, confidence=confidence))
         return items
 
     def research(self, query: str) -> list[EvidenceItem]:
@@ -298,24 +346,29 @@ class WebResearcher:
                         self._add_unique(evidence, summary)
                 except Exception:
                     continue
-        for search_query in variants[:2]:
+        for search_query in variants[:4]:
             try:
                 for item in self._wikipedia_search(search_query, "en"):
                     self._add_unique(evidence, item)
             except Exception:
                 continue
-        for search_query in variants[:4]:
+        for search_query in variants[:5]:
             try:
                 item = self._duckduckgo_instant(search_query)
                 if item:
                     self._add_unique(evidence, item)
             except Exception:
-                continue
+                pass
             try:
                 for item in self._duckduckgo_search(search_query):
                     self._add_unique(evidence, item)
             except Exception:
-                continue
+                pass
+            try:
+                for item in self._bing_search(search_query):
+                    self._add_unique(evidence, item)
+            except Exception:
+                pass
         evidence.sort(key=lambda item: item.confidence, reverse=True)
         return evidence[: self.max_evidence]
 
@@ -324,20 +377,20 @@ class WebResearcher:
         if not evidence:
             return None
         ranked = sorted(evidence, key=lambda item: item.confidence, reverse=True)
-        acronym = cls._acronym_token(question)
         valid = [item for item in ranked if item.confidence >= 0.60 and cls._is_relevant(question, item.claim, item.claim.split(":", 1)[0])]
         if not valid:
             return None
-        top = valid[0].claim.strip()
+        acronym = cls._acronym_token(question)
         if acronym:
-            # For acronym definitions, never expose a dictionary/disambiguation
-            # result as the answer. Return only evidence that establishes meaning.
-            title = top.split(":", 1)[0].strip()
-            if not cls._acronym_matches(question, title, top):
+            title = valid[0].claim.split(":", 1)[0].strip()
+            if not cls._acronym_matches(question, title, valid[0].claim):
                 return None
         question_lower = question.lower()
         definition_markers = (" nedir", " ne demek", " hakkında", " nasıl çalış")
         if any(marker in f" {question_lower}" for marker in definition_markers):
-            return top
+            return valid[0].claim.strip()
         claims = [item.claim.strip() for item in valid[:2] if item.claim.strip()]
         return "\n\n".join(dict.fromkeys(claims)) if claims else None
+
+
+__all__ = ["WebResearcher"]
