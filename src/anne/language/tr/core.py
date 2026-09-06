@@ -57,10 +57,14 @@ class TurkishLanguageEngine:
     def detect_intent(self, normalized: str) -> str:
         if any(x in normalized for x in ("hava nasıl", "hava durumu", "yağmur yağacak", "sıcaklık kaç")):
             return "weather"
+        # Arithmetic must be classified before generic question detection,
+        # because natural Turkish math questions often end with '?'.
+        if any(op in normalized for op in ("+", "-", "*", "/")) or re.search(
+            r"\d+(?:\.\d+)?\s+(artı|eksi|çarpı|bölü)\s+\d+(?:\.\d+)?", normalized
+        ):
+            return "math"
         if normalized.endswith("?") or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ")):
             return "question"
-        if any(op in normalized for op in ("+", "-", "*", "/")) or re.search(r"\d+\s+(artı|eksi|çarpı|bölü)\s+\d+", normalized):
-            return "math"
         return "statement"
 
     def infer_roles(self, tokens: tuple[str, ...]) -> dict[str, str]:
