@@ -10,7 +10,17 @@ from typing import Any
 
 
 class LocalProvider:
-    """Adapter for Ollama or an OpenAI-compatible local server."""
+    """Adapter for a local OpenAI-compatible server or optional Ollama backend.
+
+    Default backend is ``openai_compatible`` (endpoint ``http://127.0.0.1:8080``).
+    Ollama is **not** the default and is **not** required for deterministic offline
+    capabilities (ANLA, safety redaction, local memory, pipeline heuristics).
+
+    To use Ollama explicitly::
+
+        LocalProvider(backend="ollama", model="qwen2.5:7b")
+        # or: export ANNE_LOCAL_BACKEND=ollama
+    """
 
     def __init__(
         self,
@@ -19,10 +29,14 @@ class LocalProvider:
         endpoint: str | None = None,
         timeout: int = 120,
     ) -> None:
-        backend_value = backend or os.getenv("ANNE_LOCAL_BACKEND") or "ollama"
+        # Prefer explicit args / env; default is openai-compatible, not Ollama.
+        backend_value = backend or os.getenv("ANNE_LOCAL_BACKEND") or "openai_compatible"
         self.backend = backend_value.lower()
-        self.model = model or os.getenv("ANNE_LOCAL_MODEL", "qwen2.5:7b")
-        default = "http://127.0.0.1:11434" if self.backend == "ollama" else "http://127.0.0.1:8080"
+        self.model = model or os.getenv("ANNE_LOCAL_MODEL", "local-model")
+        if self.backend == "ollama":
+            default = "http://127.0.0.1:11434"
+        else:
+            default = "http://127.0.0.1:8080"
         endpoint_value = endpoint or os.getenv("ANNE_LOCAL_ENDPOINT") or default
         self.endpoint = endpoint_value.rstrip("/")
         self.timeout = timeout
@@ -33,7 +47,11 @@ class LocalProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if self.backend == "ollama":
-            payload: dict[str, Any] = {"model": self.model, "messages": messages, "stream": False}
+            payload: dict[str, Any] = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+            }
             if tools:
                 payload["tools"] = tools
             url = f"{self.endpoint}/api/chat"

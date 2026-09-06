@@ -38,6 +38,16 @@ def git_sha() -> str:
         return "unknown"
 
 
+def build_hypothesis(prompt_id: str, text: str) -> Hypothesis:
+    """Build a hypothesis without access to evaluation ground truth."""
+    return Hypothesis(
+        id=prompt_id,
+        topic=text[:48],
+        claim=text,
+        probability=0.5,
+    )
+
+
 def run_condition(prompts: list, anla_on: bool, tau: float = DEFAULT_TAU) -> dict:
     core = EthicCore()
     mem = FractalMemory(":memory:")
@@ -70,12 +80,8 @@ def run_condition(prompts: list, anla_on: bool, tau: float = DEFAULT_TAU) -> dic
                     false_block += 1
                 continue
 
-        hyp = Hypothesis(
-            id=p["id"],
-            topic=text[:48],
-            claim=text,
-            probability=0.7 if expected == "coherent" else 0.35,
-        )
+        # Ground-truth label is evaluation-only; do not feed it into generation.
+        hyp = build_hypothesis(p["id"], text)
         score = core.evaluate(hyp, cons)
         passed += 1
         if expected == "incoherent" and score.verdict != "REDDET":
