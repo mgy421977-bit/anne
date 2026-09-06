@@ -151,11 +151,13 @@ class WebResearcher:
 
     @classmethod
     def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
-        """Reject title/name collisions while remaining domain-neutral.
+        """Reject acronym/name collisions while remaining domain-neutral.
 
-        For an acronym-only question, an exact uppercase occurrence is strong
-        evidence. Lowercase occurrences are accepted only when repeated in the
-        body, which avoids accepting a single title-case name such as ``Bess``.
+        An exact uppercase acronym occurrence is strong evidence. Lowercase or
+        title-case occurrences are accepted only when repeated in the claim
+        body *after removing a duplicated title prefix*. This prevents a
+        result such as ``Brown Bess: Brown Bess, ...`` from counting the same
+        title twice and falsely satisfying the repetition rule.
         """
         acronym = cls._acronym_token(query)
         if acronym is None:
@@ -165,13 +167,23 @@ class WebResearcher:
         if re.search(rf"\b{re.escape(acronym)}\b", text):
             return True
 
-        normalized = cls._normalize(text)
+        body = claim.strip()
+        if title.strip() and re.match(rf"^{re.escape(title.strip())}\s*:\s*", body, flags=re.I):
+            body = re.sub(
+                rf"^{re.escape(title.strip())}\s*:\s*",
+                "",
+                body,
+                count=1,
+                flags=re.I,
+            )
+
+        normalized = cls._normalize(body)
         token = cls._normalize(acronym)
         occurrences = len(re.findall(rf"\b{re.escape(token)}\b", normalized))
         if occurrences >= 2:
             return True
 
-        # A single title-case occurrence is intentionally rejected.
+        # A single title/name occurrence is intentionally rejected.
         return False
 
     @classmethod
