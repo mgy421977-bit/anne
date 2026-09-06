@@ -9,7 +9,12 @@ language authority.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
+from pathlib import Path
 import re
+
+from anne.learning.capability_registry import CapabilityRegistry
+from anne.learning.greeting import GreetingLearner
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,11 @@ _SUFFIXES = (
 
 class TurkishLanguageEngine:
     """Deterministic Turkish parsing and response generation primitives."""
+
+    def __init__(self) -> None:
+        runtime_dir = Path(os.getenv("ANNE_RUNTIME_DIR", ".anne_runtime"))
+        self.capability_registry = CapabilityRegistry(runtime_dir / "capabilities.json")
+        self.greeting_learner = GreetingLearner(self.capability_registry)
 
     def normalize(self, text: str) -> str:
         text = text.strip().lower()
@@ -63,6 +73,8 @@ class TurkishLanguageEngine:
             r"\d+(?:\.\d+)?\s+(artı|eksi|çarpı|bölü)\s+\d+(?:\.\d+)?", normalized
         ):
             return "math"
+        if self.greeting_learner.matches(normalized):
+            return "greeting"
         if normalized.endswith("?") or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ")):
             return "question"
         return "statement"
@@ -100,6 +112,14 @@ class TurkishLanguageEngine:
             return f"{place} için sıcaklık {temp:g} °C. Durum: {condition}."
         if analysis.intent == "math":
             return "Matematik işlemi algılandı; hesaplama motoruna aktarılmalı."
+        if analysis.intent == "greeting":
+            learned = self.greeting_learner.answer_from_memory(analysis.normalized)
+            if learned is not None:
+                return learned[0]
+            result = self.greeting_learner.learn(analysis.normalized)
+            if result.answer is not None:
+                return result.answer
+            return "Selamlamayı algıladım; bu dil yeteneği henüz güvenli biçimde doğrulanamadı."
         if analysis.intent == "question":
             return "Soruyu anladım; gerekli gözlem veya bilgi kaynağını belirlemeliyim."
         return "İfadenizi anladım."
