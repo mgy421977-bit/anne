@@ -1,8 +1,8 @@
 """ANNE Windows Tinker — local-first cognitive console with visible execution trace.
 
-The Tinker deliberately shows an auditable *execution trace*, not hidden chain-of-thought:
-what module ran, what input/output it produced, what evidence was used, and why the
-next bounded action was selected.
+The Tinker shows an auditable execution trace, not hidden chain-of-thought:
+which module ran, what input/output it produced, what evidence was used, and why
+the next bounded action was selected.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import sys
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import scrolledtext, ttk
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -24,13 +24,6 @@ from anne.language.tr.core import TurkishLanguageEngine
 from anne.math.engine import MathEngine
 from anne.runtime.supervisor import DevelopmentProposal, DevelopmentSupervisor
 from anne.weather.open_meteo import OpenMeteoWeather
-
-try:
-    from anne.providers.gemini import GeminiProvider
-    from anne.providers.openrouter import OpenRouterProvider
-except ImportError:  # Optional: local-first Tinker must work without providers installed.
-    GeminiProvider = None  # type: ignore[assignment,misc]
-    OpenRouterProvider = None  # type: ignore[assignment,misc]
 
 DEFAULT_OR_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
@@ -48,7 +41,6 @@ class AnneTinker(tk.Tk):
         self.math = MathEngine()
         self.weather = OpenMeteoWeather()
         self.supervisor = DevelopmentSupervisor()
-        self._last_trace: list[str] = []
         self._build_ui()
         self._load_env_defaults()
         self._update_provider_fields()
@@ -57,13 +49,11 @@ class AnneTinker(tk.Tk):
     def _build_ui(self) -> None:
         root = ttk.Frame(self, padding=12)
         root.pack(fill="both", expand=True)
-
         header = ttk.Frame(root)
         header.pack(fill="x", pady=(0, 8))
         ttk.Label(header, text="ANNE v0.1", font=("Segoe UI", 16, "bold")).pack(side="left")
         self.status = ttk.Label(header, text="LOCAL-FIRST • Ready")
         self.status.pack(side="right")
-
         notebook = ttk.Notebook(root)
         notebook.pack(fill="both", expand=True)
         self.chat_tab = ttk.Frame(notebook, padding=8)
@@ -76,7 +66,6 @@ class AnneTinker(tk.Tk):
         notebook.add(self.mitos_tab, text="MITOS / Keşif")
         notebook.add(self.dev_tab, text="Geliştir")
         notebook.add(self.config_tab, text="Bağlantılar")
-
         self._build_chat()
         self._build_trace()
         self._build_mitos()
@@ -87,7 +76,6 @@ class AnneTinker(tk.Tk):
         self.chat = scrolledtext.ScrolledText(self.chat_tab, wrap="word", font=("Segoe UI", 10))
         self.chat.pack(fill="both", expand=True)
         self.chat.configure(state="disabled")
-
         bottom = ttk.Frame(self.chat_tab)
         bottom.pack(fill="x", pady=(8, 0))
         self.input_box = tk.Text(bottom, height=5, wrap="word", font=("Segoe UI", 10))
@@ -97,7 +85,6 @@ class AnneTinker(tk.Tk):
         buttons.pack(side="right", fill="y", padx=(8, 0))
         ttk.Button(buttons, text="ANNE'ye Sor", command=self.send).pack(fill="x", pady=(0, 5))
         ttk.Button(buttons, text="Temizle", command=self._clear_input).pack(fill="x")
-
         ttk.Label(
             self.chat_tab,
             text="Ctrl+Enter = gönder • Yerel motorlar önce çalışır • Cevap Silselesi sekmesinde yürütme izini görebilirsin.",
@@ -149,25 +136,20 @@ class AnneTinker(tk.Tk):
         config.pack(fill="x")
         config.columnconfigure(1, weight=1)
         config.columnconfigure(3, weight=1)
-
         ttk.Label(config, text="Provider").grid(row=0, column=0, sticky="w", padx=8, pady=6)
         self.provider = ttk.Combobox(config, values=["OpenRouter Free", "Gemini"], state="readonly")
         self.provider.grid(row=0, column=1, sticky="ew", padx=8, pady=6)
         self.provider.bind("<<ComboboxSelected>>", lambda _event: self._update_provider_fields())
-
         self.key_label = ttk.Label(config, text="OpenRouter API key")
         self.key_label.grid(row=1, column=0, sticky="w", padx=8, pady=6)
         self.api_key = ttk.Entry(config, show="*")
         self.api_key.grid(row=1, column=1, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="Model").grid(row=0, column=2, sticky="w", padx=8, pady=6)
         self.model = ttk.Entry(config)
         self.model.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
-
         ttk.Label(config, text="GitHub repository").grid(row=1, column=2, sticky="w", padx=8, pady=6)
         self.repository = ttk.Entry(config)
         self.repository.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
-
         ttk.Label(
             config,
             text="API anahtarları GUI'ye kaydedilmez; environment variable kullanılabilir. Temel Tinker bunlara ihtiyaç duymaz.",
@@ -225,7 +207,7 @@ class AnneTinker(tk.Tk):
             self.result_queue.put(("error", str(exc)))
 
     def _execute_local(self, user_input: str) -> tuple[str, list[str]]:
-        """Run only deterministic local capabilities and return an auditable trace."""
+        """Run deterministic local capabilities and return an auditable execution trace."""
         analysis = self.language.analyze(user_input)
         trace = [
             "01 OBSERVE | Kullanıcı girdisi alındı.",
@@ -233,7 +215,6 @@ class AnneTinker(tk.Tk):
             f"03 PARSE | tokens = {analysis.tokens}",
             f"04 CLASSIFY | intent = {analysis.intent}",
         ]
-
         if analysis.intent == "math":
             expression = self._extract_math_expression(analysis.normalized)
             trace.append(f"05 ROUTE | math → deterministic_decimal_ast; expression = {expression!r}")
@@ -250,7 +231,6 @@ class AnneTinker(tk.Tk):
                 ]
             )
             return f"Sonuç: {calculation.value}", trace
-
         if analysis.intent == "weather":
             city = os.getenv("ANNE_LOCATION", "İzmir")
             trace.append(f"05 ROUTE | weather → Open-Meteo observation; city = {city!r}")
@@ -264,7 +244,6 @@ class AnneTinker(tk.Tk):
                 ]
             )
             return self.language.respond(analysis, weather=observation), trace
-
         trace.extend(
             [
                 "05 ROUTE | deterministic Turkish response; external model not required.",
@@ -289,36 +268,46 @@ class AnneTinker(tk.Tk):
         question = self.mitos_input.get().strip()
         if not question:
             return
-        proposal = self.supervisor.propose(question, rationale="MITOS exploratory hypothesis generation")
-        text = (
-            f"MISSION\n{proposal.goal}\n\n"
-            "MITOS STATUS\n"
-            "Bu Tinker prototipinde MITOS yürütme katmanı, keşif amacını DevelopmentSupervisor'a bounded proposal olarak aktarıyor.\n\n"
-            f"RISK: {proposal.risk}\n"
-            f"REVERSIBLE: {proposal.reversible}\n"
-            f"TESTABLE: {proposal.testable}\n"
-            f"EVIDENCE REQUIRED: {proposal.evidence_required}\n\n"
-            "KURAL\nHipotez → araştırma → kanıt → doğrulama olmadan FACT yükseltmesi yapılmaz."
-        )
-        self._set_text(self.mitos_output, text)
+        proposals = self.supervisor.propose(question, batch_size=5)
+        lines = [
+            f"MISSION: {question}",
+            "",
+            "MITOS → BOUNDED DEVELOPMENT PROPOSALS",
+            "Her aday hipotezdir; tek başına FACT değildir.",
+            "",
+        ]
+        for index, proposal in enumerate(proposals, start=1):
+            lines.extend(
+                [
+                    f"[{index}] {proposal.decision.value} | {proposal.change}",
+                    f"    id={proposal.candidate_id}",
+                    f"    reason={proposal.reason}",
+                    f"    tests={'; '.join(proposal.required_tests)}",
+                    "",
+                ]
+            )
+        self._set_text(self.mitos_output, "\n".join(lines))
 
     def run_development_check(self) -> None:
         goal = self.dev_goal.get().strip()
-        proposal: DevelopmentProposal = self.supervisor.propose(goal, rationale="Tinker development request")
+        proposals = self.supervisor.propose(goal, batch_size=1)
+        proposal: DevelopmentProposal = proposals[0]
         allowed = self.supervisor.promotion_allowed(
-            regression_free=False,
-            capability_gain=False,
+            regression_passed=False,
+            capability_passed=False,
             sandbox_passed=False,
             policy_passed=True,
             rollback_ready=True,
         )
         text = (
             f"GOAL\n{proposal.goal}\n\n"
-            f"RISK: {proposal.risk}\nREVERSIBLE: {proposal.reversible}\nTESTABLE: {proposal.testable}\n"
-            f"EVIDENCE REQUIRED: {proposal.evidence_required}\n\n"
+            f"CANDIDATE\n{proposal.change}\n\n"
+            f"DECISION: {proposal.decision.value}\n"
+            f"REASON: {proposal.reason}\n\n"
             "PROMOTION GATE\n"
-            f"Şu an promotion_allowed = {allowed}\n\n"
-            "NEDEN\nRegression, capability gain ve sandbox kanıtı henüz verilmediği için ANNE değişikliği üretime terfi ettirmiyor."
+            f"promotion_allowed = {allowed}\n\n"
+            "NEDEN\n"
+            "Regression, capability ve sandbox kanıtı henüz verilmediği için ANNE değişikliği üretime terfi ettirmiyor."
         )
         self._set_text(self.dev_output, text)
 
@@ -328,7 +317,6 @@ class AnneTinker(tk.Tk):
                 kind, payload = self.result_queue.get_nowait()
                 if kind == "local_ok":
                     answer, trace = payload  # type: ignore[misc]
-                    self._last_trace = trace
                     self._append("ANNE", answer)
                     self._set_text(self.trace, "\n".join(trace))
                     self.status.configure(text="LOCAL-FIRST • verified")
