@@ -9,6 +9,7 @@
 - **Evidence Synthesis** — `src/anne/mythos/synthesis.py`; integrates findings while preserving provenance, contradictions and the distinction between simulation and observation.
 - **Agency Gate** — `src/anne/core/agency_gate.py`; fail-closed boundary for external action.
 - **Autonomous Systems** — `src/anne/agent/autonomy.py`; bounded lifecycle and reversible optimization contracts.
+- **Repository Governance** — `src/anne/repository_governance.py`; evidence-gated branch lifecycle evaluation. It can recommend KEEP/REVIEW/ARCHIVE/DELETE but never performs repository operations itself.
 
 ## Canonical MITOS modules
 
@@ -32,9 +33,13 @@ Do not create parallel implementations under `src/anne/mitos/` or another namesp
 6. Irreversible or high-risk external actions require review; missing provenance is denied.
 7. Autonomous systems use explicit state transitions and retain a last-known-good baseline.
 8. Resource reservations are identified and released exactly once.
+9. Repository governance is fail-closed: missing or conflicting branch evidence means REVIEW, never DELETE.
+10. `main`, protected branches, open-PR branches, unique-knowledge branches, active bases, and branches referenced by active work are never automatically deleted.
+11. Automatic deletion requires a proven duplicate, a preserved copy, no protected condition, and confidence >= 0.995.
+12. Repository governance cannot modify its own safety policy or Agency Gate through the cleanup mechanism.
 
 ## Implementation status
 
-**Implemented baseline:** candidate API, deterministic seeded generation, bounded specialist missions, provenance validation, resource reservation tracking, evidence synthesis, hard-risk workspace filtering, agency risk/reversibility gates, autonomous lifecycle enforcement.
+**Implemented baseline:** candidate API, deterministic seeded generation, bounded specialist missions, provenance validation, resource reservation tracking, evidence synthesis, hard-risk workspace filtering, agency risk/reversibility gates, autonomous lifecycle enforcement, repository branch governance policy and tests.
 
-**Next runtime work:** provider/tool adapters, persistent FractalMemory experience, real sandbox/shadow/canary executors, and controlled ablation/evaluation runs.
+**Next runtime work:** provider/tool adapters, persistent FractalMemory experience, real sandbox/shadow/canary executors, repository inspection/execution adapters with explicit Agency Gate integration, and controlled ablation/evaluation runs.
