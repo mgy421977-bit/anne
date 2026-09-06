@@ -41,6 +41,14 @@ class PercentageLearner:
     def _decimal(value: str) -> Decimal:
         return Decimal(value.replace(",", "."))
 
+    @staticmethod
+    def _display(value: Decimal) -> str:
+        """Render Decimal results in human form without scientific notation."""
+        text = format(value.normalize(), "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text or "0"
+
     def matches(self, question: str) -> bool:
         """Recognize both Turkish and compact percent notation."""
         return bool(self._MATCH.search(question.lower().strip()))
@@ -81,8 +89,8 @@ class PercentageLearner:
         web_evidence = self.researcher.research("percentage of a number formula percent calculation")
         trace.append(f"04 RESEARCH | Web evidence items = {len(web_evidence)}")
         for item in web_evidence[:3]:
-            trace.append(f"05 EVIDENCE | {item.source}: {item.claim[:180]}")
             candidate.evidence.append(item)
+            trace.append(f"05 EVIDENCE | {item.source}: {item.claim[:180]}")
 
         trace.append("06 HYPOTHESIS | X × (Y / 100)")
         cases = (
@@ -98,12 +106,13 @@ class PercentageLearner:
             ok = result == expected
             passed += int(ok)
             trace.append(
-                f"07 TEST {index} | {a} × {b}% = {result} | expected={expected} | {'PASS' if ok else 'FAIL'}"
+                f"07 TEST {index} | {a} × {b}% = {self._display(result)} | "
+                f"expected={self._display(expected)} | {'PASS' if ok else 'FAIL'}"
             )
             candidate.evidence.append(
                 EvidenceItem(
                     source=f"deterministic_experiment_{index}",
-                    claim=f"{a} × {b}% = {result}",
+                    claim=f"{a} × {b}% = {self._display(result)}",
                     kind="experiment",
                     provenance="ANNE deterministic Decimal engine",
                     confidence=1.0,
@@ -120,7 +129,7 @@ class PercentageLearner:
             1.0,
             0.5 * candidate.test_accuracy + 0.5 * (1.0 if web_evidence else 0.0),
         )
-        answer = str(transfer.normalize())
+        answer = self._display(transfer)
         trace.append(
             f"08 TRANSFER | {x} × {y}% = {answer} | {'PASS' if candidate.transfer_passed else 'FAIL'}"
         )
