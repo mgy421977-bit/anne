@@ -1,15 +1,11 @@
-"""Deterministic evidence fusion for corroboration and contradiction checks.
-
-Fusion is deliberately conservative: multiple snippets from the same source do
-not count as independent support. The layer does not prove truth; it decides
-whether retrieved evidence is sufficiently corroborated to support an answer.
-"""
+"""Deterministic evidence fusion for corroboration, contradiction and freshness."""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from anne.core.temporal_intelligence import apply_freshness
 from anne.learning.evidence import EvidenceItem
 
 
@@ -53,19 +49,17 @@ def _contradicts(a: str, b: str) -> bool:
         ("çalışmaz", "çalışır"), ("çalışmıyor", "çalışıyor"),
         ("desteklenmez", "desteklenir"), ("desteklenmiyor", "destekleniyor"),
     )
-    normalized_pairs = []
-    for x, y in pairs:
-        nx = x.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
-        ny = y.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
-        normalized_pairs.append((nx, ny))
-    normalized_left = f" {left.replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')} "
-    normalized_right = f" {right.replace('ı', 'i').replace('ş', 's').replace('ğ', 'g').replace('ü', 'u').replace('ö', 'o').replace('ç', 'c')} "
-    return any((x in normalized_left and y in normalized_right) or (y in normalized_left and x in normalized_right) for x, y in normalized_pairs)
+    def norm(value: str) -> str:
+        return value.replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ü", "u").replace("ö", "o").replace("ç", "c")
+    normalized_left = f" {norm(left)} "
+    normalized_right = f" {norm(right)} "
+    return any((norm(x) in normalized_left and norm(y) in normalized_right) or (norm(y) in normalized_left and norm(x) in normalized_right) for x, y in pairs)
 
 
-def fuse_evidence(items: list[EvidenceItem], *, authority_required: bool = False,
+def fuse_evidence(items: list[EvidenceItem], *, question: str = "", authority_required: bool = False,
                   min_support: int = 2, min_confidence: float = 0.72) -> FusionResult:
-    usable = [i for i in items if i.claim.strip() and not i.simulated]
+    temporal = apply_freshness(question, items)
+    usable = list(temporal.usable)
     usable.sort(key=lambda i: i.confidence, reverse=True)
     selected: list[EvidenceItem] = []
     domains: set[str] = set()
@@ -87,6 +81,8 @@ def fuse_evidence(items: list[EvidenceItem], *, authority_required: bool = False
     weighted = sum(i.confidence for i in selected) / support if support else 0.0
     corroboration_bonus = min(0.12, max(0, independent - 1) * 0.06)
     confidence = min(1.0, weighted + corroboration_bonus)
+    if temporal.time_sensitive:
+        confidence = min(1.0, confidence * (0.85 + 0.15 * temporal.freshness_confidence))
     if authority_required:
         official = [i for i in selected if _domain(i.provenance or i.source).endswith((".gov.tr", ".gov", ".mil.tr", ".edu.tr"))]
         if official:
@@ -101,6 +97,8 @@ def fuse_evidence(items: list[EvidenceItem], *, authority_required: bool = False
         reason = "insufficient_independent_support"
     elif confidence < min_confidence:
         reason = "confidence_below_gate"
+    elif temporal.time_sensitive and temporal.reason != "fresh_evidence":
+        reason = temporal.reason
     else:
         reason = "corroborated"
     return FusionResult(sufficient, round(confidence, 3), support, independent, contradictions, tuple(selected), reason)
