@@ -1,8 +1,8 @@
 """Web-first knowledge resolver with ordered external-provider fallback.
 
-Resolution order is deliberately explicit:
+Resolution order:
 1. persistent knowledge memory
-2. public web evidence
+2. public web research + bounded extractive answer
 3. OpenRouter
 4. Gemini
 
@@ -123,6 +123,34 @@ class KnowledgeResolver:
             raise RuntimeError("Gemini returned no answer")
         return text.strip()
 
+    def _save_answer(
+        self,
+        *,
+        question: str,
+        answer: str,
+        evidence: list[EvidenceItem],
+        provider: str,
+        confidence: float,
+    ) -> None:
+        record_evidence = [
+            {
+                "source": item.source,
+                "claim": item.claim,
+                "kind": item.kind,
+                "provenance": item.provenance,
+                "confidence": item.confidence,
+                "simulated": item.simulated,
+            }
+            for item in evidence
+        ]
+        self.memory.save(
+            question=question,
+            answer=answer,
+            evidence=record_evidence,
+            provider=provider,
+            confidence=confidence,
+        )
+
     def resolve(self, question: str) -> KnowledgeResolution:
         trace = [
             "01 OBSERVE | Bilinmeyen soru için bilgi çözümleme başlatıldı.",
@@ -163,28 +191,40 @@ class KnowledgeResolver:
         for item in evidence[:5]:
             trace.append(f"05 EVIDENCE | {item.source}: {item.claim[:220]}")
 
+        # If the public web already contains a sufficiently strong claim, ANNE
+        # answers from that evidence directly. This keeps the web-first contract
+        # useful even when neither external API is configured or reachable.
+        web_answer = self.web.answer(question, evidence)
+        if web_answer:
+            confidence = max(item.confidence for item in evidence)
+            self._save_answer(
+                question=question,
+                answer=web_answer,
+                evidence=evidence,
+                provider="web",
+                confidence=confidence,
+            )
+            trace.extend([
+                "06 ROUTE | Public web evidence yeterli; harici model çağrısı gerekmiyor.",
+                "07 PROVIDER | web evidence → bounded extractive answer.",
+                "08 ANLA | Web kanıtı ANNE'nin bilgi kaydına dönüştürülüyor.",
+                "09 MEMORY | knowledge.json içine kaynak/provenance ile kaydedildi.",
+                "10 VERIFY | Kayıt FACT olarak değil LEARNED_CANDIDATE olarak tutuluyor.",
+                f"11 ANSWER | provider=web; confidence={confidence:.2f}",
+            ])
+            return KnowledgeResolution(web_answer, tuple(trace), "web", tuple(evidence), confidence)
+
         provider_errors: list[str] = []
         for provider_name, provider in (("OpenRouter", self._openrouter), ("Gemini", self._gemini)):
-            trace.append(f"06 ROUTE | {provider_name} fallback hazırlanıyor.")
+            trace.append(f"06 ROUTE | Web sonuç çıkaramadı; {provider_name} fallback hazırlanıyor.")
             try:
                 answer = provider(question, evidence)
                 trace.append(f"07 PROVIDER | {provider_name} cevap üretti.")
                 confidence = 0.70 if evidence else 0.55
-                record_evidence = [
-                    {
-                        "source": item.source,
-                        "claim": item.claim,
-                        "kind": item.kind,
-                        "provenance": item.provenance,
-                        "confidence": item.confidence,
-                        "simulated": item.simulated,
-                    }
-                    for item in evidence
-                ]
-                self.memory.save(
+                self._save_answer(
                     question=question,
                     answer=answer,
-                    evidence=record_evidence,
+                    evidence=evidence,
                     provider=provider_name,
                     confidence=confidence,
                 )
@@ -192,11 +232,12 @@ class KnowledgeResolver:
                     "08 ANLA | Dış cevap ANNE'nin bilgi kaydına dönüştürülüyor.",
                     "09 MEMORY | knowledge.json içine kaynak/provenance ile kaydedildi.",
                     "10 VERIFY | Kayıt FACT olarak değil LEARNED_CANDIDATE olarak tutuluyor.",
+                    f"11 ANSWER | provider={provider_name}; confidence={confidence:.2f}",
                 ])
                 return KnowledgeResolution(answer, tuple(trace), provider_name, tuple(evidence), confidence)
             except Exception as exc:
                 provider_errors.append(f"{provider_name}: {exc}")
                 trace.append(f"07 PROVIDER | {provider_name} kullanılamadı: {exc}")
 
-        trace.append("08 FAIL-CLOSED | OpenRouter ve Gemini cevap veremedi; cevap uydurulmadı.")
+        trace.append("08 FAIL-CLOSED | Web, OpenRouter ve Gemini cevap veremedi; cevap uydurulmadı.")
         return KnowledgeResolution(None, tuple(trace + provider_errors), None, tuple(evidence), 0.0)
