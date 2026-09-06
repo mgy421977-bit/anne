@@ -26,10 +26,26 @@ def test_title_case_acronym_collision_is_rejected() -> None:
     )
 
 
+def test_wiktionary_disambiguation_acronym_collision_is_rejected() -> None:
+    assert not WebResearcher._is_relevant(
+        "BESS nedir?",
+        "Bess: Look up Bess or BESS in Wiktionary, the free dictionary. Bess or BESS may refer to: Bess (name), a given name, nickname and surname.",
+        "Bess",
+    )
+
+
 def test_real_acronym_result_is_accepted() -> None:
     assert WebResearcher._is_relevant(
         "BESS nedir?",
         "BESS (Battery Energy Storage System) is a battery energy storage system.",
+        "Battery Energy Storage System",
+    )
+
+
+def test_full_name_then_acronym_is_accepted() -> None:
+    assert WebResearcher._is_relevant(
+        "BESS nedir?",
+        "Battery Energy Storage System (BESS) is a system for storing electrical energy.",
         "Battery Energy Storage System",
     )
 
