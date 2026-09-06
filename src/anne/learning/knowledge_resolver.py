@@ -138,19 +138,36 @@ class KnowledgeResolver:
                 )
         return None
 
+    @classmethod
+    def _cached_acronym_is_safe(cls, question: str, answer: str) -> bool:
+        """Reject cached external answers that confuse acronyms with names/words."""
+        for acronym in cls._ACRONYM_RE.findall(question):
+            # Exact uppercase acronym is strong evidence that the answer addresses
+            # the requested abbreviation. A title-case spelling such as "Bess" is
+            # deliberately not enough because it can be a person's name.
+            if re.search(rf"\b{re.escape(acronym)}\b", answer):
+                continue
+            normalized_answer = WebResearcher._normalize(answer)
+            expansion_terms = WebResearcher._ACRONYM_EXPANSIONS.get(acronym.lower(), set())
+            if not expansion_terms or not any(
+                re.search(rf"\b{re.escape(WebResearcher._normalize(term))}\b", normalized_answer)
+                for term in expansion_terms
+            ):
+                return False
+        return True
+
     def _cached_answer_is_relevant(self, question: str, cached: dict[str, Any], evidence: tuple[EvidenceItem, ...]) -> bool:
-        """Reject stale cached web answers that no longer match the question."""
+        """Reject stale cached external answers before they can become local authority."""
         provider = str(cached.get("provider", ""))
         if provider not in {"web", "OpenRouter", "Gemini"}:
             return True
+        answer = str(cached.get("answer", ""))
+        if not answer or not self._cached_acronym_is_safe(question, answer):
+            return False
         if not evidence:
-            # External-model records without evidence are still usable only when
-            # there is no obvious acronym collision in the answer.
-            return not any(
-                term.lower() in {"ges", "bess", "res", "hes", "epc"} and
-                term.lower() not in str(cached.get("answer", "")).lower()
-                for term in self._ACRONYM_RE.findall(question)
-            )
+            # No provenance means the external answer must not be trusted as a
+            # durable answer merely because the question string was seen before.
+            return False
         relevant = [
             item for item in evidence
             if WebResearcher._is_relevant(question, item.claim, item.source)
@@ -179,7 +196,7 @@ class KnowledgeResolver:
                     "04 ROUTE | persistent knowledge → answer",
                     "05 VERIFY | Kaynak/provenance korunuyor; yeni API çağrısı yapılmadı.",
                 ]), str(cached.get("provider", "memory")), evidence, float(cached.get("confidence", 0.0)), True)
-            trace.append("03 MEMORY | Eski bilgi kaydı bulundu ancak soru ile ilgisiz; stale cache reddedildi.")
+            trace.append("03 MEMORY | Eski dış kaynak kaydı güvenli doğrulamadan geçmedi; yeniden araştırılıyor.")
 
         trace.append("04 RESEARCH | Public web araştırması başlatıldı.")
         evidence = self.web.research(question)
