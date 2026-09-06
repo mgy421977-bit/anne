@@ -6,21 +6,31 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-_SECRET_PATTERNS = (
-    re.compile(r"(?i)(api[_ -]?key|token|password|secret)\s*[:=]\s*[^\s,;]+"),
-    re.compile(r"\b(?:sk|ghp|github_pat)_[A-Za-z0-9_-]{12,}\b"),
+# Bare tokens and labeled secrets. Replacements avoid forcing "prefix=[REDACTED]".
+_SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Bearer <token>
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._\-+=/]{8,}"), "Bearer [REDACTED]"),
+    # OpenAI-style project keys
+    (re.compile(r"\bsk-proj-[A-Za-z0-9_\-]{8,}\b"), "[REDACTED]"),
+    # GitHub fine-grained PAT
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{8,}\b"), "[REDACTED]"),
+    # Classic GitHub PAT / generic sk_ / ghp_
+    (re.compile(r"\b(?:sk|ghp)_[A-Za-z0-9_\-]{12,}\b"), "[REDACTED]"),
+    # key/token/password/secret = value (preserve key name, redact value only)
+    (
+        re.compile(
+            r"(?i)((?:api[_ -]?key|token|password|secret)\s*[:=]\s*)([^\s,;]+)"
+        ),
+        r"\1[REDACTED]",
+    ),
 )
 
 
 def redact_sensitive(text: str) -> str:
     """Redact common credentials before text enters durable memory."""
     redacted = text
-    for pattern in _SECRET_PATTERNS:
-        redacted = pattern.sub(
-            lambda match: match.group(0).split("=", 1)[0].split(":", 1)[0]
-            + "=[REDACTED]",
-            redacted,
-        )
+    for pattern, replacement in _SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
     return redacted
 
 
