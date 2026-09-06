@@ -7,8 +7,8 @@ findings to FACT; epistemic evaluation and the final decision belong to ANNE.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from anne.learning.evidence import EvidenceItem as AnneEvidenceItem
 from anne.learning.web_research import WebResearcher
@@ -19,9 +19,9 @@ from .agent_swarm import AgentRole, EvidenceItem, EvidencePackage, MitosAgentSwa
 class MitosResearchResult:
     """Collected research returned from MITOS to ANNE.
 
-    This object is intentionally evidence-only. ``completed`` means the
-    mission executed and reported; it does not mean that the findings are
-    correct or sufficient. ANNE owns evaluation, verification and decision.
+    ``completed`` means that a mission executed and reported. It does not mean
+    that the findings are true, sufficient, or selected for the final answer.
+    ANNE owns evaluation, verification, synthesis, and decision.
     """
 
     evidence: tuple[AnneEvidenceItem, ...]
@@ -34,8 +34,8 @@ class MitosWebResearch:
     """Plan and collect bounded web evidence for ANNE.
 
     MITOS may explore multiple specialist perspectives, including incomplete
-    or contradictory results. It must return what it found rather than make a
-    final sufficiency/truth decision. ANNE decides what the evidence means.
+    or contradictory results. It returns what it found; ANNE decides what the
+    evidence means.
     """
 
     MAX_PARALLEL_MISSIONS = 3
@@ -66,7 +66,16 @@ class MitosWebResearch:
 
     @staticmethod
     def _query(mission: ResearchMission) -> str:
-        return mission.scope.split("Question:", 1)[-1].split("\nFocus:", 1)[0].strip() + " " + mission.objective
+        """Keep the retrieval query focused on the user question plus one facet.
+
+        Mission-control prose is not sent to the search engine because it can
+        dilute retrieval relevance and cause unrelated results to outrank the
+        actual subject.
+        """
+        scope = mission.scope
+        question = scope.split("Question:", 1)[-1].split("\nFocus:", 1)[0].strip()
+        focus = scope.split("\nFocus:", 1)[-1].split("\nOutput:", 1)[0].strip()
+        return f"{question} {focus}".strip()
 
     def _run_agent(self, agent) -> tuple[object, list[AnneEvidenceItem], EvidencePackage | None, str]:
         agent.start()
