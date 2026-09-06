@@ -1,7 +1,7 @@
 """Generic public-web research for ANNE.
 
 The web layer is topic-agnostic. It searches unknown questions without
-hard-coding domain vocabulary.
+hard-coding GES, BESS, RES, HES, EPC, or any other domain vocabulary.
 """
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ class WebResearcher:
 
     @classmethod
     def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
-        """Require semantic acronym evidence, not just an uppercase collision."""
+        """Require an acronym to be semantically defined, not merely mentioned."""
         acronym = cls._acronym_token(query)
         if acronym is None:
             return True
@@ -165,20 +165,48 @@ class WebResearcher:
 
         full_text = f"{title_text} {body}"
         token = re.escape(acronym)
+        normalized_full = cls._normalize(full_text)
 
-        # Generic explicit expansion/definition patterns.
+        # Reject common dictionary/disambiguation/name pages before looking for
+        # acronym evidence. These pages can contain the uppercase token BESS but
+        # do not establish what the requested acronym means.
+        disambiguation_patterns = (
+            r"\bmay refer to\b",
+            r"\blook up .*? in (?:the )?free dictionary\b",
+            r"\bfree dictionary\b",
+            r"\bgiven name\b",
+            r"\bnickname\b",
+            r"\bsurname\b",
+            r"\bdisambiguation\b",
+        )
+        if any(re.search(pattern, normalized_full, flags=re.I) for pattern in disambiguation_patterns):
+            return False
+
+        # Explicit expansion patterns are strongest. Allow an empty prefix inside
+        # parentheses so the canonical form "Battery ... (BESS)" is recognized.
         expansion_patterns = (
-            rf"\([^)]{{2,120}}\b{token}\b[^)]{{0,120}}\)",
+            rf"\([^)]{{0,120}}\b{token}\b[^)]{{0,120}}\)",
             rf"\b{token}\b\s+(?:stands?\s+for|means|refers?\s+to)\b",
             rf"\b{token}\b\s+(?:is|are)\s+(?:an?|the)\b",
             rf"\b(?:abbreviation|acronym)\s+(?:for|of)\b[^.{{0,120}}]*\b{token}\b",
         )
-        if any(re.search(pattern, full_text, flags=re.I) for pattern in expansion_patterns):
+
+        # Parentheses alone are not enough: require the text immediately around
+        # the acronym to contain a plausible expansion-like phrase.
+        acronym_in_parens = re.search(rf"\([^)]{{0,120}}\b{token}\b[^)]{{0,120}}\)", full_text)
+        if acronym_in_parens:
+            before = full_text[:acronym_in_parens.start()].strip()
+            inside = acronym_in_parens.group(0)
+            expansion_context = before[-140:] + " " + inside
+            context_terms = cls._tokens(expansion_context)
+            if len(context_terms) >= 2:
+                return True
+
+        if any(re.search(pattern, full_text, flags=re.I) for pattern in expansion_patterns[1:]):
             return True
 
-        # A bare uppercase occurrence is not enough. This prevents generic
-        # disambiguation pages such as "Bess or BESS may refer to..." from
-        # becoming evidence for an acronym definition.
+        # A bare uppercase occurrence is never enough. Require repeated acronym
+        # use in the body after removing the duplicated title prefix.
         normalized_body = cls._normalize(body)
         normalized_token = cls._normalize(acronym)
         occurrences = len(re.findall(rf"\b{re.escape(normalized_token)}\b", normalized_body))
