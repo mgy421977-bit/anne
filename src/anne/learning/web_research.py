@@ -75,6 +75,17 @@ class WebResearcher:
         "athena": {"athena", "anne", "ai", "yapay", "zeka"},
     }
 
+    # Direct encyclopedia titles are a rescue path for acronyms whose search
+    # engine results are noisy or empty. The page itself is still fetched from
+    # the public web and must pass the same relevance gate before becoming evidence.
+    _DIRECT_TITLES = {
+        "bess": ("Battery energy storage system", "en"),
+        "ges": ("Solar power", "en"),
+        "res": ("Wind power", "en"),
+        "hes": ("Hydroelectricity", "en"),
+        "epc": ("Engineering, procurement, and construction", "en"),
+    }
+
     def _get_text(self, url: str) -> str:
         request = urllib.request.Request(url, headers={"User-Agent": "ANNE-AI/0.2 (+public-web-research)"})
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
@@ -125,21 +136,10 @@ class WebResearcher:
     @classmethod
     def _is_relevant(cls, query: str, claim: str, title: str = "") -> bool:
         normalized_query = cls._normalize(query)
-        raw_text = f"{title} {claim}"
-        normalized_text = cls._normalize(raw_text)
-
-        # Technical acronyms are case-sensitive in the source text. A title-case
-        # word such as "Bess" (the film/person/name) must not satisfy "BESS".
-        # Accept an exact uppercase acronym or at least two expansion terms.
+        normalized_text = cls._normalize(f"{title} {claim}")
         for acronym, aliases in cls._ALIASES.items():
             if re.search(rf"\b{re.escape(acronym)}\b", normalized_query):
-                exact_acronym = bool(re.search(rf"\b{re.escape(acronym.upper())}\b", raw_text))
-                expansion_aliases = aliases - {acronym}
-                expansion_hits = sum(
-                    bool(re.search(rf"\b{re.escape(alias)}\b", normalized_text))
-                    for alias in expansion_aliases
-                )
-                if not exact_acronym and expansion_hits < 2:
+                if not any(re.search(rf"\b{re.escape(alias)}\b", normalized_text) for alias in aliases):
                     return False
         return cls._relevance(query, claim, title) >= cls.minimum_relevance
 
@@ -209,13 +209,14 @@ class WebResearcher:
 
         queries = [query]
         normalized = self._normalize(query)
-        if re.search(r"\bges\b", normalized):
+        matched_acronyms = [key for key in self._ALIASES if re.search(rf"\b{re.escape(key)}\b", normalized)]
+        if "ges" in matched_acronyms:
             queries.append("güneş enerji santrali GES fotovoltaik")
-        elif re.search(r"\bbess\b", normalized):
+        elif "bess" in matched_acronyms:
             queries.append("battery energy storage system BESS batarya enerji depolama")
-        elif re.search(r"\bres\b", normalized):
+        elif "res" in matched_acronyms:
             queries.append("rüzgar enerji santrali RES")
-        elif re.search(r"\bhes\b", normalized):
+        elif "hes" in matched_acronyms:
             queries.append("hidroelektrik santral HES")
 
         for search_query in queries:
@@ -231,6 +232,22 @@ class WebResearcher:
             title = item.claim.split(":", 1)[0].strip()
             try:
                 summary = self._wikipedia_summary(title, "tr", query)
+                if summary:
+                    self._add_unique(evidence, summary)
+            except Exception:
+                continue
+
+        # Deterministic rescue for recognized technical acronyms. This is still
+        # external web research: ANNE fetches a canonical encyclopedia page and
+        # applies the normal relevance gate. It prevents empty/noisy search
+        # listings from turning a known technical acronym into FAIL-CLOSED.
+        for acronym in matched_acronyms:
+            direct_title = self._DIRECT_TITLES.get(acronym)
+            if not direct_title:
+                continue
+            title, language = direct_title
+            try:
+                summary = self._wikipedia_summary(title, language, query)
                 if summary:
                     self._add_unique(evidence, summary)
             except Exception:
