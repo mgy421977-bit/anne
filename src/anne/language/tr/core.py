@@ -33,6 +33,14 @@ _SUFFIXES = (
     "da", "de", "ta", "te", "ı", "i", "u", "ü", "a", "e", "ın", "in", "un", "ün",
 )
 
+_QUESTION_WORDS = ("ne", "nasıl", "kaç", "kim", "neden", "niçin", "nerede", "nereye", "nereden", "hangi", "hangisi", "hangileri", "mı", "mi", "mu", "mü")
+_QUESTION_PHRASES = (
+    " nedir", " ne demek", " hakkında bilgi", " hakkında anlat", " açıkla",
+    " anlatır mısın", " anlat", " ne işe yarar", " nasıl çalışır", " hangi",
+    " hangisi", " hangileri", " karşılaştır", " kıyasla", " seçenekleri",
+    " imkanları", " imkanları nelerdir", " seçenekleri nelerdir",
+)
+
 
 class TurkishLanguageEngine:
     """Deterministic Turkish parsing and response generation primitives."""
@@ -75,24 +83,15 @@ class TurkishLanguageEngine:
             return "math"
         if self.greeting_learner.matches(normalized):
             return "greeting"
-        if (
-            normalized.endswith("?")
-            or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ", "hangi "))
-            or any(
-                phrase in normalized
-                for phrase in (
-                    " nedir",
-                    " ne demek",
-                    " hakkında bilgi",
-                    " hakkında anlat",
-                    " açıkla",
-                    " anlatır mısın",
-                    " anlat",
-                    " ne işe yarar",
-                    " nasıl çalışır",
-                )
-            )
-        ):
+
+        # Turkish questions do not have to start with a question word and do
+        # not have to end with '?'. Detect interrogative words anywhere in the
+        # sentence so requests such as "... hangi seçenekler ..." reach the
+        # knowledge/research path instead of being treated as statements.
+        tokens = self.tokenize(normalized)
+        has_question_word = any(token in _QUESTION_WORDS for token in tokens)
+        has_question_phrase = any(phrase in normalized for phrase in _QUESTION_PHRASES)
+        if normalized.endswith("?") or has_question_word or has_question_phrase:
             return "question"
         return "statement"
 
@@ -101,7 +100,7 @@ class TurkishLanguageEngine:
         for token in tokens:
             if token in {"ben", "sen", "o", "biz", "siz", "onlar"}:
                 roles[token] = "pronoun"
-            elif token in {"nasıl", "ne", "kaç", "kim", "neden", "nerede", "hangi"}:
+            elif token in _QUESTION_WORDS:
                 roles[token] = "question_word"
         return roles
 
