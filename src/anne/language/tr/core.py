@@ -34,6 +34,7 @@ class TurkishLanguageEngine:
 
     def normalize(self, text: str) -> str:
         text = text.strip().lower()
+        text = text.replace("×", "*").replace("÷", "/")
         text = re.sub(r"\s+", " ", text)
         return text
 
@@ -58,7 +59,7 @@ class TurkishLanguageEngine:
             return "weather"
         if normalized.endswith("?") or normalized.startswith(("ne ", "nasıl ", "kaç ", "kim ", "neden ", "nerede ")):
             return "question"
-        if any(op in normalized for op in ("+", "-", "*", "/", "÷", "×")) or re.search(r"\d+\s+(artı|eksi|çarpı|bölü)\s+\d+", normalized):
+        if any(op in normalized for op in ("+", "-", "*", "/")) or re.search(r"\d+\s+(artı|eksi|çarpı|bölü)\s+\d+", normalized):
             return "math"
         return "statement"
 
