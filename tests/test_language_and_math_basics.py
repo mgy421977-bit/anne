@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from anne.language.tr.core import TurkishLanguageEngine
 from anne.math.engine import MathEngine
 
@@ -18,7 +20,7 @@ def test_turkish_question_has_structural_roles():
     result = TurkishLanguageEngine().analyze("Sen nasılsın?")
     assert result.intent == "question"
     assert result.roles["sen"] == "pronoun"
-    assert result.roles["nasılsın"] == "question_word" or "nasıl" in result.tokens
+    assert result.roles.get("nasılsın") == "question_word" or "nasıl" in result.tokens
 
 
 def test_math_basic_operations_are_deterministic():
@@ -30,10 +32,5 @@ def test_math_basic_operations_are_deterministic():
 
 
 def test_math_engine_rejects_code_execution():
-    engine = MathEngine()
-    try:
-        engine.calculate("__import__('os').system('echo unsafe')")
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("unsafe expression was accepted")
+    with pytest.raises(ValueError):
+        MathEngine().calculate("__import__('os').system('echo unsafe')")
