@@ -1,9 +1,7 @@
 """Generic public-web research for ANNE.
 
-The web layer is deliberately topic-agnostic. It must work for energy,
-science, people, companies, regulations, products, software, history, or
-any other unknown question. Domain-specific knowledge belongs in evidence,
-not in the retrieval engine.
+The web layer is topic-agnostic. It searches unknown questions without
+hard-coding GES, BESS, RES, HES, EPC, or any other domain vocabulary.
 """
 from __future__ import annotations
 
@@ -17,8 +15,6 @@ from .evidence import EvidenceItem
 
 
 class _DuckDuckGoParser(HTMLParser):
-    """Extract ordinary DuckDuckGo result titles, links and snippets."""
-
     def __init__(self) -> None:
         super().__init__()
         self.results: list[tuple[str, str, str]] = []
@@ -59,11 +55,15 @@ class _DuckDuckGoParser(HTMLParser):
 
 
 class WebResearcher:
-    """Search public web sources without hard-coding domain-specific topics."""
+    """Generic public-web retrieval with conservative evidence filtering."""
 
     timeout = 8.0
     minimum_relevance = 0.28
     max_evidence = 8
+
+    # Compatibility marker for older local modules. No domain vocabulary is
+    # stored here; the retrieval engine remains domain-neutral.
+    _ACRONYM_EXPANSIONS: dict[str, set[str]] = {}
 
     _STOPWORDS = {
         "ve", "veya", "ile", "bir", "bu", "şu", "için", "olan", "olarak",
@@ -76,7 +76,7 @@ class WebResearcher:
     def _get_text(url: str) -> str:
         request = urllib.request.Request(
             url,
-            headers={"User-Agent": "ANNE-AI/0.3 (+generic-public-web-research)"},
+            headers={"User-Agent": "ANNE-AI/0.4 (+generic-public-web-research)"},
         )
         with urllib.request.urlopen(request, timeout=WebResearcher.timeout) as response:
             return response.read().decode("utf-8", errors="replace")
@@ -110,21 +110,18 @@ class WebResearcher:
 
     @classmethod
     def _query_variants(cls, query: str) -> list[str]:
-        """Create generic search variants; no domain-specific vocabulary."""
         clean = re.sub(r"[?!.]+$", "", query.strip()).strip()
         variants = [clean]
         normalized = cls._normalize(clean)
-        if normalized != clean.lower():
+        if normalized and normalized != clean.lower():
             variants.append(normalized)
 
-        # Definition/identity variants help search engines without requiring
-        # ANNE to know anything about the subject in advance.
         lowered = clean.lower()
-        if lowered.endswith("nedir") or " nedir" in lowered:
+        if " nedir" in f" {lowered}":
             subject = re.sub(r"\bnedir\b", "", clean, flags=re.I).strip()
             if subject:
-                variants.extend([f"{subject} definition", subject])
-        elif lowered.endswith("kimdir") or " kimdir" in lowered:
+                variants.extend([subject, f"{subject} definition"])
+        elif " kimdir" in f" {lowered}":
             subject = re.sub(r"\bkimdir\b", "", clean, flags=re.I).strip()
             if subject:
                 variants.extend([subject, f"{subject} biography"])
@@ -143,27 +140,39 @@ class WebResearcher:
         return result[:4]
 
     @classmethod
-    def _is_acronym_query(cls, query: str) -> bool:
-        tokens = [t for t in re.findall(r"\b[A-Za-zÇĞİÖŞÜçğıöşü]{2,10}\b", query) if t.lower() not in cls._STOPWORDS]
-        return len(tokens) == 1 and tokens[0].isupper()
+    def _acronym_token(cls, query: str) -> str | None:
+        tokens = [
+            token for token in re.findall(r"\b[A-Za-zÇĞİÖŞÜçğıöşü]{2,12}\b", query)
+            if token.lower() not in cls._STOPWORDS
+        ]
+        if len(tokens) == 1 and tokens[0].isupper():
+            return tokens[0]
+        return None
 
     @classmethod
-    def _acronym_matches(cls, query: str, text: str) -> bool:
-        """Avoid title-case word collisions for acronym-only questions.
+    def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
+        """Reject title/name collisions while remaining domain-neutral.
 
-        Example: ``BESS nedir?`` must not accept a result about the name
-        ``Bess``. This is a generic lexical safety rule, not a BESS-specific
-        knowledge rule.
+        For an acronym-only question, an exact uppercase occurrence is strong
+        evidence. Lowercase occurrences are accepted only when repeated in the
+        body, which avoids accepting a single title-case name such as ``Bess``.
         """
-        if not cls._is_acronym_query(query):
+        acronym = cls._acronym_token(query)
+        if acronym is None:
             return True
-        acronym = next(
-            token for token in re.findall(r"\b[A-Za-zÇĞİÖŞÜçğıöşü]{2,10}\b", query)
-            if token.lower() not in cls._STOPWORDS
-        )
+
+        text = f"{title} {claim}"
         if re.search(rf"\b{re.escape(acronym)}\b", text):
             return True
-        return bool(re.search(rf"\b{re.escape(acronym.lower())}\b", cls._normalize(text))) and acronym.lower() == cls._normalize(acronym)
+
+        normalized = cls._normalize(text)
+        token = cls._normalize(acronym)
+        occurrences = len(re.findall(rf"\b{re.escape(token)}\b", normalized))
+        if occurrences >= 2:
+            return True
+
+        # A single title-case occurrence is intentionally rejected.
+        return False
 
     @classmethod
     def _relevance(cls, query: str, claim: str, title: str = "") -> float:
@@ -185,8 +194,7 @@ class WebResearcher:
 
     @classmethod
     def _is_relevant(cls, query: str, claim: str, title: str = "") -> bool:
-        text = f"{title} {claim}"
-        if not cls._acronym_matches(query, text):
+        if not cls._acronym_matches(query, title, claim):
             return False
         return cls._relevance(query, claim, title) >= cls.minimum_relevance
 
@@ -284,8 +292,6 @@ class WebResearcher:
         evidence: list[EvidenceItem] = []
         variants = self._query_variants(query)
 
-        # Search every unknown question through the same generic retrieval path.
-        # No GES/BESS/RES/etc. routing is required here.
         for search_query in variants:
             try:
                 for item in self._wikipedia_search(search_query, "tr"):
@@ -293,7 +299,6 @@ class WebResearcher:
             except Exception:
                 continue
 
-        # Enrich only the strongest discovered Wikipedia candidates.
         for item in list(evidence[:6]):
             if not item.source.startswith("Wikipedia"):
                 continue
@@ -306,7 +311,6 @@ class WebResearcher:
             except Exception:
                 continue
 
-        # English Wikipedia is a generic fallback, not a domain-specific rescue.
         if len(evidence) < 3:
             for search_query in variants[:2]:
                 try:
@@ -315,7 +319,6 @@ class WebResearcher:
                 except Exception:
                     continue
 
-        # DuckDuckGo provides a second independent public-web path.
         for search_query in variants[:2]:
             try:
                 item = self._duckduckgo_instant(search_query)
@@ -334,29 +337,17 @@ class WebResearcher:
 
     @staticmethod
     def answer(question: str, evidence: list[EvidenceItem]) -> str | None:
-        """Return a bounded evidence-based answer candidate.
-
-        This is intentionally conservative. If web evidence is not strong
-        enough, KnowledgeResolver escalates to OpenRouter and then Gemini.
-        """
         if not evidence:
             return None
         ranked = sorted(evidence, key=lambda item: item.confidence, reverse=True)
         if ranked[0].confidence < 0.60:
             return None
-
         top = ranked[0].claim.strip()
         if not top:
             return None
-
         question_lower = question.lower()
         definition_markers = (" nedir", " ne demek", " hakkında", " nasıl çalış")
         if any(marker in f" {question_lower}" for marker in definition_markers):
             return top
-
-        claims: list[str] = []
-        for item in ranked[:2]:
-            claim = item.claim.strip()
-            if claim and claim not in claims:
-                claims.append(claim)
-        return "\n\n".join(claims) if claims else None
+        claims = [item.claim.strip() for item in ranked[:2] if item.claim.strip()]
+        return "\n\n".join(dict.fromkeys(claims)) if claims else None
