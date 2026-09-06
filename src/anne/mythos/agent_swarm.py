@@ -1,18 +1,15 @@
-"""Bounded specialist-agent orchestration for MITOS."""
+"""Bounded specialist-agent orchestration for MITOS.
+
+MITOS is ANNE's subconscious-inspired exploration layer: it decides what
+needs investigation, creates temporary specialist workers, and receives
+evidence back for synthesis. Specialist agents never inherit MITOS authority.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
 from uuid import uuid4
-
-
-_REQUIRED_FORBIDDEN_ACTIONS = frozenset({
-    "external_side_effects",
-    "system_modification",
-    "credential_access",
-    "financial_transaction",
-    "agent_creation",
-})
 
 
 class AgentRole(str, Enum):
@@ -31,23 +28,36 @@ class ResearchMission:
     objective: str
     scope: str
     role: AgentRole
-    mission_id: str = field(default_factory=lambda: f"mission_{uuid4().hex[:12]}")
+    mission_id: str = "m1"
     allowed_tools: tuple[str, ...] = ()
-    forbidden_actions: tuple[str, ...] = tuple(sorted(_REQUIRED_FORBIDDEN_ACTIONS))
+    forbidden_actions: tuple[str, ...] = (
+        "external_side_effects",
+        "system_modification",
+        "credential_access",
+        "financial_transaction",
+        "agent_creation",
+    )
     search_budget: int = 25
     compute_budget: float = 1.0
     runtime_seconds: int = 600
     output_schema: str = "EvidencePackage"
 
     def validate(self) -> None:
-        if not self.objective.strip() or not self.scope.strip() or not self.mission_id.strip():
-            raise ValueError("objective, scope and mission_id are required")
+        if not self.objective.strip():
+            raise ValueError("objective is required")
+        if not self.scope.strip():
+            raise ValueError("scope is required")
         if self.search_budget < 0 or self.compute_budget < 0 or self.runtime_seconds < 0:
             raise ValueError("research budgets cannot be negative")
-        if not _REQUIRED_FORBIDDEN_ACTIONS.issubset(self.forbidden_actions):
+        required = {
+            "external_side_effects",
+            "credential_access",
+            "system_modification",
+            "financial_transaction",
+            "agent_creation",
+        }
+        if not required.issubset(self.forbidden_actions):
             raise ValueError("specialist mission is missing mandatory safety restrictions")
-        if self.output_schema != "EvidencePackage":
-            raise ValueError("research agents must return EvidencePackage records")
 
 
 @dataclass(frozen=True)
@@ -60,27 +70,21 @@ class EvidenceItem:
     provenance: str = ""
 
     def validate(self) -> None:
-        if not self.claim.strip() or not self.source.strip() or not self.provenance.strip():
-            raise ValueError("claim, source and provenance are required")
+        if not self.claim.strip() or not self.source.strip():
+            raise ValueError("claim and source are required")
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
 
 
-@dataclass(frozen=True)
+@dataclass
 class EvidencePackage:
     mission_id: str
     agent_id: str
     role: AgentRole
-    findings: tuple[EvidenceItem, ...] = ()
-    contradictions: tuple[str, ...] = ()
-    open_questions: tuple[str, ...] = ()
-    simulation_results: tuple[str, ...] = ()
-
-    def validate(self) -> None:
-        if not self.mission_id.strip() or not self.agent_id.strip():
-            raise ValueError("mission_id and agent_id are required")
-        for finding in self.findings:
-            finding.validate()
+    findings: list[EvidenceItem] = field(default_factory=list)
+    contradictions: list[str] = field(default_factory=list)
+    open_questions: list[str] = field(default_factory=list)
+    simulation_results: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -101,21 +105,12 @@ class ResearchAgent:
     def report(self, package: EvidencePackage) -> EvidencePackage:
         if self.status != "RUNNING":
             raise RuntimeError("agent must be running before reporting")
-        package.validate()
-        if package.agent_id != self.agent_id or package.mission_id != self.mission.mission_id or package.role != self.mission.role:
-            raise ValueError("evidence package does not belong to this agent or mission")
+        if package.agent_id != self.agent_id or package.mission_id != self.mission.mission_id:
+            raise ValueError("evidence package does not belong to this mission")
+        for finding in package.findings:
+            finding.validate()
         self.status = "COMPLETED"
         return package
-
-
-@dataclass(frozen=True)
-class Reservation:
-    reservation_id: str
-    mission_id: str
-    search_budget: int
-    compute_budget: float
-    runtime_seconds: int
-    released: bool = False
 
 
 @dataclass
@@ -128,75 +123,53 @@ class ResourceGovernor:
     searches_reserved: int = 0
     compute_reserved: float = 0.0
     runtime_reserved: int = 0
-    reservations: dict[str, Reservation] = field(default_factory=dict)
 
-    def reserve(self, mission: ResearchMission) -> str | None:
+    def reserve(self, mission: ResearchMission) -> bool:
         mission.validate()
         if self.active_agents + 1 > self.max_agents:
-            return None
+            return False
         if self.searches_reserved + mission.search_budget > self.max_total_searches:
-            return None
+            return False
         if self.compute_reserved + mission.compute_budget > self.max_total_compute:
-            return None
+            return False
         if self.runtime_reserved + mission.runtime_seconds > self.max_total_runtime_seconds:
-            return None
-        rid = f"res_{uuid4().hex[:12]}"
+            return False
         self.active_agents += 1
         self.searches_reserved += mission.search_budget
         self.compute_reserved += mission.compute_budget
         self.runtime_reserved += mission.runtime_seconds
-        self.reservations[rid] = Reservation(rid, mission.mission_id, mission.search_budget, mission.compute_budget, mission.runtime_seconds)
-        return rid
+        return True
 
-    def release(self, reservation_id: str) -> None:
-        reservation = self.reservations.get(reservation_id)
-        if reservation is None:
-            raise KeyError("unknown reservation")
-        if reservation.released:
-            raise RuntimeError("reservation already released")
-        self.active_agents -= 1
-        self.searches_reserved -= reservation.search_budget
-        self.compute_reserved -= reservation.compute_budget
-        self.runtime_reserved -= reservation.runtime_seconds
-        self.reservations[reservation_id] = Reservation(
-            reservation.reservation_id, reservation.mission_id, reservation.search_budget,
-            reservation.compute_budget, reservation.runtime_seconds, True,
-        )
+    def release(self, mission: ResearchMission) -> None:
+        self.active_agents = max(0, self.active_agents - 1)
+        self.searches_reserved = max(0, self.searches_reserved - mission.search_budget)
+        self.compute_reserved = max(0.0, self.compute_reserved - mission.compute_budget)
+        self.runtime_reserved = max(0, self.runtime_reserved - mission.runtime_seconds)
 
 
 class MitosAgentSwarm:
-    """Creates temporary specialist agents under explicit bounded missions."""
+    """Creates only specialist agents justified by a bounded research plan."""
 
     def __init__(self, governor: ResourceGovernor | None = None) -> None:
         self.governor = governor or ResourceGovernor()
         self.agents: list[ResearchAgent] = []
         self.evidence: list[EvidencePackage] = []
-        self.reservations: dict[str, str] = {}
-        self._submitted: set[tuple[str, str]] = set()
 
     def create(self, missions: list[ResearchMission]) -> list[ResearchAgent]:
         created: list[ResearchAgent] = []
         for mission in missions:
-            reservation_id = self.governor.reserve(mission)
-            if reservation_id is None:
+            if not self.governor.reserve(mission):
                 break
             agent = ResearchAgent(mission)
             agent.authorize()
             self.agents.append(agent)
-            self.reservations[agent.agent_id] = reservation_id
             created.append(agent)
         return created
 
     def submit(self, package: EvidencePackage) -> None:
-        agent = next((a for a in self.agents if a.agent_id == package.agent_id), None)
+        agent = next((item for item in self.agents if item.agent_id == package.agent_id), None)
         if agent is None:
-            raise ValueError("unknown agent")
-        key = (package.mission_id, package.agent_id)
-        if key in self._submitted:
-            raise ValueError("evidence package already submitted")
-        agent.report(package)
+            raise ValueError("evidence package references an unknown agent")
+        if package.mission_id != agent.mission.mission_id:
+            raise ValueError("evidence package references the wrong mission")
         self.evidence.append(package)
-        self._submitted.add(key)
-        reservation_id = self.reservations.pop(agent.agent_id, None)
-        if reservation_id is not None:
-            self.governor.release(reservation_id)

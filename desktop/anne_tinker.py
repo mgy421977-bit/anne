@@ -45,7 +45,9 @@ class AnneTinker(tk.Tk):
         config.columnconfigure(3, weight=1)
 
         ttk.Label(config, text="Provider").grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        self.provider = ttk.Combobox(config, values=["OpenRouter Free", "Gemini"], state="readonly", width=20)
+        self.provider = ttk.Combobox(
+            config, values=["OpenRouter Free", "Gemini"], state="readonly", width=20
+        )
         self.provider.grid(row=0, column=1, sticky="w", padx=8, pady=6)
         self.provider.bind("<<ComboboxSelected>>", lambda _event: self._update_provider_fields())
 
@@ -87,12 +89,16 @@ class AnneTinker(tk.Tk):
 
         button_frame = ttk.Frame(input_frame)
         button_frame.pack(side="right", fill="y", padx=(8, 0))
-        ttk.Button(button_frame, text="Send", command=self.send).pack(fill="x", pady=(0, 5))
+        self.send_button = ttk.Button(button_frame, text="Send", command=self.send)
+        self.send_button.pack(fill="x", pady=(0, 5))
         ttk.Button(button_frame, text="Clear", command=self._clear_input).pack(fill="x")
 
         hint = ttk.Label(
             root,
-            text="Ctrl+Enter = Send | ANNE can read GitHub/local files and write durable learning to GitHub memory.",
+            text=(
+                "Ctrl+Enter = Send | ANNE can read GitHub/local files and "
+                "write durable learning to GitHub memory."
+            ),
         )
         hint.pack(anchor="w", pady=(5, 0))
 
@@ -138,9 +144,12 @@ class AnneTinker(tk.Tk):
             messagebox.showwarning("Missing API key", f"Enter the {self.provider.get()} API key.")
             return
         if not github_token:
-            messagebox.showwarning("Missing token", "Enter a GitHub token with Contents read/write permission.")
+            messagebox.showwarning(
+                "Missing token", "Enter a GitHub token with Contents read/write permission."
+            )
             return
         self._clear_input()
+        self.send_button.configure(state="disabled")
         self._append("YOU", user_input)
         self.status.configure(text="ANNE is thinking and can use tools…")
         threading.Thread(
@@ -149,7 +158,15 @@ class AnneTinker(tk.Tk):
             daemon=True,
         ).start()
 
-    def _worker(self, user_input: str, api_key: str, github_token: str, repository: str, model: str, provider_name: str) -> None:
+    def _worker(
+        self,
+        user_input: str,
+        api_key: str,
+        github_token: str,
+        repository: str,
+        model: str,
+        provider_name: str,
+    ) -> None:
         try:
             if provider_name == "Gemini":
                 provider = GeminiProvider(api_key=api_key, model=model)
@@ -173,12 +190,17 @@ class AnneTinker(tk.Tk):
                         "ANNE",
                         f"{result.response}\n\n"
                         f"[Tools: {tools}]\n"
-                        f"[Learning saved: {result.memory_path} | confidence={result.confidence:.2f}]",
+                        f"[Learning saved: {result.memory_path} | "
+                        f"confidence={result.confidence:.2f}]",
                     )
                     self.status.configure(text="Ready — response and memory completed.")
+                    self.send_button.configure(state="normal")
                 else:
                     self._append("SYSTEM ERROR", str(payload))
-                    self.status.configure(text="Error — check keys, network, permissions, or provider quota.")
+                    self.status.configure(
+                        text="Error — check keys, network, permissions, or provider quota."
+                    )
+                    self.send_button.configure(state="normal")
         except queue.Empty:
             pass
         self.after(100, self._poll_results)

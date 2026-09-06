@@ -172,9 +172,7 @@ omit only when no semantic extraction is useful.
             "local_read": self.local_tools.read,
         }
         if isinstance(memory, GitHubMemory):
-            self.github_tools = GitHubRepoTool(
-                memory.token, memory.repository, memory.branch
-            )
+            self.github_tools = GitHubRepoTool(memory.token, memory.repository, memory.branch)
             self.tools.update(
                 {
                     "github_read_file": self.github_tools.read_file,
@@ -193,6 +191,30 @@ omit only when no semantic extraction is useful.
         if start in text and end in text:
             return text.split(start, 1)[1].split(end, 1)[0].strip()
         return ""
+
+    @staticmethod
+    def _needs_answer_retry(text: str, user_input: str) -> bool:
+        """Reject canned acknowledgements and unsupported research fallbacks."""
+        answer = AnneAgent._section(text, "RESPONSE") or text.strip()
+        canned = {
+            "İfadenizi anladım.",
+            "Anladım.",
+            "I understand your request.",
+            "The model did not return a final synthesis after the available "
+            "evidence was collected.",
+        }
+        research_markers = (
+            "araştır",
+            "kaynak",
+            "2026",
+            "karşılaştır",
+            "destek",
+            "evaluate",
+            "research",
+        )
+        return answer in canned or (
+            len(answer) < 80 and any(marker in user_input.lower() for marker in research_markers)
+        )
 
     def _execute_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         decision = self.tool_policy.authorize(name, arguments)
@@ -265,16 +287,13 @@ omit only when no semantic extraction is useful.
             {
                 "role": "user",
                 "content": (
-                    f"PERSISTENT MEMORY:\n{memory_context}\n\n"
-                    f"CURRENT USER INPUT:\n{user_input}"
+                    f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}"
                 ),
             },
         ]
         tools_used: list[str] = []
 
-        self._prefetch_explicit_repo_evidence(
-            user_input, messages, tools_used
-        )
+        self._prefetch_explicit_repo_evidence(user_input, messages, tools_used)
 
         model = cast(OpenRouterProvider, self.model)
 
@@ -299,11 +318,7 @@ omit only when no semantic extraction is useful.
                 name = str(fn.get("name") or "")
                 raw_args = fn.get("arguments", "{}")
                 try:
-                    arguments = (
-                        json.loads(raw_args)
-                        if isinstance(raw_args, str)
-                        else raw_args
-                    )
+                    arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
                 except json.JSONDecodeError:
                     arguments = {}
                 if not isinstance(arguments, dict):
@@ -337,10 +352,7 @@ omit only when no semantic extraction is useful.
                 continue
             final_choices = final_data.get("choices") or []
             if final_choices:
-                raw = str(
-                    (final_choices[0].get("message") or {}).get("content")
-                    or ""
-                ).strip()
+                raw = str((final_choices[0].get("message") or {}).get("content") or "").strip()
                 if raw:
                     return raw, tools_used
 
@@ -374,22 +386,29 @@ omit only when no semantic extraction is useful.
                 0.2,
             )
             review = self.metacognition.review(self.workspace, str(response))
-            return AgentResult(
-                str(response), learning, 0.2, memory_path, [], review.__dict__
-            )
+            return AgentResult(str(response), learning, 0.2, memory_path, [], review.__dict__)
 
         self.workspace.transition("GÖR")
         memory_context = self.memory.context(limit=8)
         if isinstance(self.model, OpenRouterProvider):
-            raw, tools_used = self._openrouter_run(
-                user_input, memory_context
-            )
+            raw, tools_used = self._openrouter_run(user_input, memory_context)
         else:
-            raw = self.model.ask(
-                f"PERSISTENT MEMORY:\n{memory_context}\n\n"
-                f"CURRENT USER INPUT:\n{user_input}",
-                system_instruction=self.SYSTEM,
-            )
+            if isinstance(self.model, GeminiProvider):
+                raw = self.model.plan(user_input, memory_context)
+            else:
+                raw = self.model.ask(
+                    f"PERSISTENT MEMORY:\n{memory_context}\n\nCURRENT USER INPUT:\n{user_input}",
+                    system_instruction=self.SYSTEM,
+                )
+            if self._needs_answer_retry(raw, user_input):
+                raw = self.model.ask(
+                    "Answer the user's request directly. Do not acknowledge the request "
+                    "without answering it. If current sources or web access are required, "
+                    "state exactly which facts cannot be verified and still provide a useful "
+                    "comparison, decision framework, assumptions, and a concrete research plan.\n\n"
+                    f"USER REQUEST:\n{user_input}\n\nMEMORY:\n{memory_context}",
+                    system_instruction=self.SYSTEM,
+                )
             tools_used = []
 
         self.workspace.transition("ANLA")
@@ -406,10 +425,7 @@ omit only when no semantic extraction is useful.
                 self.workspace.observations.append(
                     "Model semantic frame invalid; text grounding retained"
                 )
-        learning = (
-            self._section(raw, "LEARNING")
-            or "No new durable learning."
-        )
+        learning = self._section(raw, "LEARNING") or "No new durable learning."
         try:
             confidence = float(self._section(raw, "CONFIDENCE"))
         except ValueError:
