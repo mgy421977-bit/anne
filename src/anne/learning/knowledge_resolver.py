@@ -14,6 +14,7 @@ from anne.core.evidence_fusion import fuse_evidence
 from anne.core.output_validator import OutputValidator
 from anne.core.source_intelligence import rank_evidence, requires_authority
 from anne.core.temporal_intelligence import apply_freshness
+from anne.mythos.web_research import MitosWebResearch
 from .evidence import EvidenceItem
 from .knowledge_memory import KnowledgeMemory
 from .web_research import WebResearcher
@@ -34,7 +35,6 @@ class KnowledgeResolver:
     """Resolve unknown questions with evidence gating and one-provider fallback."""
 
     timeout = 20.0
-    _TERM_RE = re.compile(r"^\s*(.{1,80}?)\s*=\s*(.{1,200})\s*$")
     _ACRONYM_RE = re.compile(r"\b([A-ZÇĞİÖŞÜ]{2,10})\b")
     _TERM_QUERY_RE = re.compile(r"^\s*[A-ZÇĞİÖŞÜ]{2,10}\s*(?:nedir|ne demek|açılımı nedir|ne anlama gelir)\s*\??\s*$", re.IGNORECASE)
 
@@ -42,6 +42,7 @@ class KnowledgeResolver:
         self.web = web or WebResearcher()
         runtime_dir = Path(os.getenv("ANNE_RUNTIME_DIR", ".anne_runtime"))
         self.memory = memory or KnowledgeMemory(runtime_dir / "knowledge.json")
+        self.mitos = MitosWebResearch(self.web)
 
     @staticmethod
     def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
@@ -172,13 +173,38 @@ class KnowledgeResolver:
                 return KnowledgeResolution(web_answer, tuple(trace + ["08 ROUTE | Evidence Fusion yeterli; harici model çağrısı gerekmiyor.", f"09 VALIDATE | web answer={reason}; score={score:.2f}", "10 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), "web", tuple(fusion.selected), confidence)
             trace.append(f"08 WEB | answer rejected or fusion insufficient; validation={reason}; fusion={fusion.reason}.")
 
+        if not fusion.sufficient:
+            trace.append("09 MITOS | Evidence gap detected; bounded specialist web research başlatılıyor.")
+            try:
+                mitos_result = self.mitos.research(question)
+                trace.extend(mitos_result.trace)
+                if mitos_result.evidence:
+                    merged = evidence + [item for item in mitos_result.evidence if item.claim not in {old.claim for old in evidence}]
+                    evidence = rank_evidence(merged, authority_required=authority)
+                    temporal = apply_freshness(question, evidence)
+                    fusion = fuse_evidence(temporal.usable if temporal.time_sensitive else evidence, question=question, authority_required=authority)
+                    trace.append(f"MITOS | ANNE re-fusion support={fusion.support_count}; independent={fusion.independent_sources}; confidence={fusion.confidence:.2f}; status={fusion.reason}.")
+                    for item in fusion.selected[:5]:
+                        trace.append(f"MITOS EVIDENCE | {item.source}: {item.claim[:220]}")
+                    web_answer = self.web.answer(question, list(fusion.selected))
+                    if web_answer:
+                        ok, score, reason = self._validate_answer(question, web_answer)
+                        if ok and fusion.sufficient:
+                            confidence = min(fusion.confidence, score)
+                            self._save_answer(question=question, answer=web_answer, evidence=list(fusion.selected), provider="web", confidence=confidence)
+                            return KnowledgeResolution(web_answer, tuple(trace + ["MITOS ROUTE | Evidence Fusion sufficient after MITOS research.", f"MITOS VALIDATE | score={score:.2f}; reason={reason}", "MITOS MEMORY | LEARNED_CANDIDATE kaydedildi."]), "web", tuple(fusion.selected), confidence)
+                else:
+                    trace.append("MITOS | specialist web research returned no evidence; fail-closed continues.")
+            except Exception as exc:
+                trace.append(f"MITOS | bounded research failed: {exc}; provider fallback continues.")
+
         primary = os.getenv("ANNE_PRIMARY_PROVIDER", "OpenRouter").strip().lower()
         providers = [("OpenRouter", self._openrouter), ("Gemini", self._gemini)]
         if primary == "gemini":
             providers.reverse()
         provider_name, provider = providers[0]
         fallback_name, fallback = providers[1]
-        trace.append(f"09 PROVIDER | primary={provider_name}; exactly one provider is attempted before fallback.")
+        trace.append(f"10 PROVIDER | primary={provider_name}; sequential fallback enabled.")
         provider_evidence = list(fusion.selected) if fusion.selected else evidence
         try:
             answer = provider(question, provider_evidence)
@@ -186,21 +212,21 @@ class KnowledgeResolver:
             if ok:
                 confidence = min(fusion.confidence if fusion.selected else 0.55, score)
                 self._save_answer(question=question, answer=answer, evidence=provider_evidence, provider=provider_name, confidence=confidence)
-                return KnowledgeResolution(answer, tuple(trace + [f"10 PROVIDER | {provider_name} cevap üretti ve doğrulandı.", f"11 VALIDATE | score={score:.2f}; reason={reason}", "12 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), provider_name, tuple(provider_evidence), confidence)
-            trace.append(f"10 VALIDATE | {provider_name} output rejected: {reason}; score={score:.2f}")
+                return KnowledgeResolution(answer, tuple(trace + [f"11 PROVIDER | {provider_name} cevap üretti ve doğrulandı.", f"12 VALIDATE | score={score:.2f}; reason={reason}", "13 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), provider_name, tuple(provider_evidence), confidence)
+            trace.append(f"11 VALIDATE | {provider_name} output rejected: {reason}; score={score:.2f}")
         except Exception as exc:
-            trace.append(f"10 PROVIDER | {provider_name} kullanılamadı: {exc}")
+            trace.append(f"11 PROVIDER | {provider_name} kullanılamadı: {exc}")
 
-        trace.append(f"11 PROVIDER | {provider_name} başarısız; fallback={fallback_name} şimdi deneniyor.")
+        trace.append(f"12 PROVIDER | {provider_name} başarısız; fallback={fallback_name} şimdi deneniyor.")
         try:
             answer = fallback(question, provider_evidence)
             ok, score, reason = self._validate_answer(question, answer)
             if ok:
                 confidence = min(fusion.confidence if fusion.selected else 0.55, score)
                 self._save_answer(question=question, answer=answer, evidence=provider_evidence, provider=fallback_name, confidence=confidence)
-                return KnowledgeResolution(answer, tuple(trace + [f"12 PROVIDER | {fallback_name} cevap üretti ve doğrulandı.", f"13 VALIDATE | score={score:.2f}; reason={reason}", "14 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), fallback_name, tuple(provider_evidence), confidence)
-            trace.append(f"13 VALIDATE | {fallback_name} output rejected: {reason}; score={score:.2f}")
+                return KnowledgeResolution(answer, tuple(trace + [f"13 PROVIDER | {fallback_name} cevap üretti ve doğrulandı.", f"14 VALIDATE | score={score:.2f}; reason={reason}", "15 MEMORY | Kaynak/provenance ile LEARNED_CANDIDATE kaydedildi."]), fallback_name, tuple(provider_evidence), confidence)
+            trace.append(f"14 VALIDATE | {fallback_name} output rejected: {reason}; score={score:.2f}")
         except Exception as exc:
-            trace.append(f"13 PROVIDER | {fallback_name} kullanılamadı: {exc}")
+            trace.append(f"14 PROVIDER | {fallback_name} kullanılamadı: {exc}")
 
-        return KnowledgeResolution(None, tuple(trace + ["14 FAIL-CLOSED | Web ve sıralı provider fallback'leri cevap veremedi; cevap uydurulmadı.", "15 ANSWER | Güvenilir cevap üretilemedi."]), None, tuple(provider_evidence), 0.0)
+        return KnowledgeResolution(None, tuple(trace + ["15 FAIL-CLOSED | Web, MITOS ve sıralı provider fallback'leri cevap veremedi; cevap uydurulmadı.", "16 ANSWER | Güvenilir cevap üretilemedi."]), None, tuple(provider_evidence), 0.0)
