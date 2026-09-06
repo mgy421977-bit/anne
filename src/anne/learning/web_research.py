@@ -150,21 +150,39 @@ class WebResearcher:
         return None
 
     @classmethod
-    def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
-        """Reject acronym/name collisions while remaining domain-neutral.
+    def _acronym_definition_context(cls, acronym: str, title: str, claim: str) -> bool:
+        """Return whether a result actually defines/uses an acronym as a term.
 
-        An exact uppercase acronym occurrence is strong evidence. Lowercase or
-        title-case occurrences are accepted only when repeated in the claim
-        body *after removing a duplicated title prefix*. This prevents a
-        result such as ``Brown Bess: Brown Bess, ...`` from counting the same
-        title twice and falsely satisfying the repetition rule.
+        Mere occurrence is insufficient: names such as ``Bess`` and dictionary
+        disambiguation pages can contain the uppercase token without explaining
+        the requested concept. Accept common, domain-neutral definition forms
+        such as ``Full Name (ABC)``, ``ABC (Full Name)``, ``ABC stands for ...``
+        and ``ABC is ...``.
         """
+        text = f"{title}. {claim}".strip()
+        token = re.escape(acronym)
+        patterns = (
+            rf"\b[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü\-]*(?:\s+[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü\-]*){{1,10}}\s*\(\s*{token}\s*\)",
+            rf"\b{token}\b\s*\(\s*[A-Za-zÇĞİÖŞÜçğıöşü][^)]{{2,120}}\)",
+            rf"\b{token}\b\s+(?:stands for|means|refers to|is|are|denotes|abbreviates)\b",
+            rf"\b{token}\b\s*[:\-]\s*[A-Za-zÇĞİÖŞÜçğıöşü]",
+        )
+        return any(re.search(pattern, text, flags=re.I) for pattern in patterns)
+
+    @classmethod
+    def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
+        """Reject acronym/name collisions while requiring definition context."""
         acronym = cls._acronym_token(query)
         if acronym is None:
             return True
 
-        text = f"{title} {claim}"
-        if re.search(rf"\b{re.escape(acronym)}\b", text):
+        # A result must demonstrate that the acronym is being used as a term,
+        # not merely contain the same letters as a person's name or title.
+        if not cls._acronym_definition_context(acronym, title, claim):
+            return False
+
+        # For explicit uppercase usage, definition context is sufficient.
+        if re.search(rf"\b{re.escape(acronym)}\b", f"{title} {claim}"):
             return True
 
         body = claim.strip()
@@ -180,11 +198,7 @@ class WebResearcher:
         normalized = cls._normalize(body)
         token = cls._normalize(acronym)
         occurrences = len(re.findall(rf"\b{re.escape(token)}\b", normalized))
-        if occurrences >= 2:
-            return True
-
-        # A single title/name occurrence is intentionally rejected.
-        return False
+        return occurrences >= 2
 
     @classmethod
     def _relevance(cls, query: str, claim: str, title: str = "") -> float:
