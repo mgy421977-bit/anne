@@ -35,6 +35,7 @@ class KnowledgeResolver:
     timeout = 20.0
     _TERM_RE = re.compile(r"^\s*(.{1,80}?)\s*=\s*(.{1,200})\s*$")
     _ACRONYM_RE = re.compile(r"\b([A-ZÇĞİÖŞÜ]{2,10})\b")
+    _TERM_QUERY_RE = re.compile(r"^\s*[A-ZÇĞİÖŞÜ]{2,10}\s*(?:nedir|ne demek|açılımı nedir|ne anlama gelir)\s*\??\s*$", re.IGNORECASE)
 
     def __init__(self, *, web: WebResearcher | None = None, memory: KnowledgeMemory | None = None) -> None:
         self.web = web or WebResearcher()
@@ -92,11 +93,19 @@ class KnowledgeResolver:
         self.memory.save(question=question, answer=answer, evidence=self._saveable_evidence(evidence), provider=provider, confidence=confidence)
 
     def _term_answer(self, question: str) -> KnowledgeResolution | None:
-        for term in self._ACRONYM_RE.findall(question.strip()):
-            record = self.memory.get_term(term)
-            if record and record.get("meaning"):
-                meaning = str(record["meaning"])
-                return KnowledgeResolution(f"{term}: {meaning}.", ("03 MEMORY | Öğrenilmiş terminoloji eşleşmesi bulundu.", f"04 TERM | {term} = {meaning}", "05 VERIFY | Kayıt kullanıcı kaynağından gelen LEARNED_CANDIDATE.", "06 ROUTE | terminology memory → answer; web/API çağrısı yapılmadı.", "07 ANSWER | Yerel öğrenilmiş bilgi kullanıldı."), "user-memory", tuple(), float(record.get("confidence", 0.95)), True)
+        # Terminology memory is a shortcut only for standalone definition queries.
+        # A complex question containing an acronym (e.g. GES + incentives) must
+        # continue through public-web research instead of being truncated to the acronym.
+        if not self._TERM_QUERY_RE.match(question):
+            return None
+        term = self._ACRONYM_RE.search(question.strip())
+        if not term:
+            return None
+        acronym = term.group(1)
+        record = self.memory.get_term(acronym)
+        if record and record.get("meaning"):
+            meaning = str(record["meaning"])
+            return KnowledgeResolution(f"{acronym}: {meaning}.", ("03 MEMORY | Öğrenilmiş terminoloji eşleşmesi bulundu.", f"04 TERM | {acronym} = {meaning}", "05 VERIFY | Kayıt kullanıcı kaynağından gelen LEARNED_CANDIDATE.", "06 ROUTE | terminology memory → answer; web/API çağrısı yapılmadı.", "07 ANSWER | Yerel öğrenilmiş bilgi kullanıldı."), "user-memory", tuple(), float(record.get("confidence", 0.95)), True)
         return None
 
     @classmethod
