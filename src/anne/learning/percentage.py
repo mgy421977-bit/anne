@@ -67,6 +67,14 @@ class PercentageLearner:
     def _calculate(x: Decimal, y: Decimal) -> Decimal:
         return x * (y / Decimal("100"))
 
+    def solve(self, question: str) -> str | None:
+        """Apply the already-promoted deterministic capability without research."""
+        parsed = self._parse(question)
+        if parsed is None:
+            return None
+        x, y = parsed
+        return self._display(self._calculate(x, y))
+
     def learn(self, question: str) -> LearningResult:
         """Research the rule, run deterministic tests, and validate transfer."""
         parsed = self._parse(question)
