@@ -20,6 +20,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from anne.core.knowledge_router import KnowledgeRouter
 from anne.language.tr.core import TurkishLanguageEngine
 from anne.learning.capability_memory import CapabilityMemory
 from anne.learning.percentage import PercentageLearner
@@ -42,6 +43,7 @@ class AnneTinker(tk.Tk):
         self.language = TurkishLanguageEngine()
         self.math = MathEngine()
         self.weather = OpenMeteoWeather()
+        self.knowledge_router = KnowledgeRouter()
         self.supervisor = DevelopmentSupervisor()
         self.percentage_learner = PercentageLearner()
         self.capability_memory = CapabilityMemory(ROOT / ".anne_runtime" / "capabilities.json")
@@ -249,9 +251,6 @@ class AnneTinker(tk.Tk):
             trace.append("11 ANSWER | Güvenli transfer cevabı üretilemedi; aday korunuyor.")
             return "Bu yüzde ifadesi için öğrenme adayı oluşturuldu ancak güvenli cevap üretilemedi.", trace
 
-        # Learned conversational capabilities are routed before the generic
-        # Turkish language fallback so the visible trace matches the actual
-        # capability-memory decision.
         greeting_learner = self.language.greeting_learner
         if greeting_learner.matches(user_input):
             learned = greeting_learner.answer_from_memory(user_input)
@@ -302,6 +301,18 @@ class AnneTinker(tk.Tk):
                 "09 VERIFY | Kaynak gözlemi ile cevap oluşturuldu.",
             ])
             return self.language.respond(analysis, weather=observation), trace
+        if analysis.intent == "question":
+            route = self.knowledge_router.resolve(user_input)
+            trace.extend([
+                f"05 ROUTE | knowledge_router → {route.route}",
+                "06 KNOWLEDGE | KnowledgeResolver: memory → public web → provider fallback → fail-closed",
+            ])
+            trace.extend(route.resolution.trace)
+            if route.resolution.answer:
+                trace.append(f"12 ANSWER | provider={route.resolution.provider or 'none'}; confidence={route.resolution.confidence:.2f}")
+                return route.resolution.answer, trace
+            trace.append("12 ANSWER | Güvenilir cevap üretilemedi; uydurma yapılmadı.")
+            return "Bu soru için güvenilir bir cevap üretemedim; mevcut kanıt yetersiz.", trace
         trace.extend([
             "05 ROUTE | deterministic Turkish response; external model not required.",
             "06 PARSE | morphology ve basit sentence-role heuristics uygulandı.",
@@ -420,14 +431,14 @@ class AnneTinker(tk.Tk):
             while True:
                 kind, payload = self.result_queue.get_nowait()
                 if kind == "local_ok":
-                    answer, trace = payload  # type: ignore[misc]
+                    answer, trace = payload
                     self._append("ANNE", answer)
                     self._set_text(self.trace, "\n".join(trace))
                     self.status.configure(text="LOCAL-FIRST • verified")
                 elif kind == "capability_refresh":
                     self._refresh_capability_status()
                 elif kind == "learning_ok":
-                    text, _result = payload  # type: ignore[misc]
+                    text, _result = payload
                     self._set_text(self.learning_output, text)
                     self._refresh_capability_status()
                     self.learning_status.configure(text="Status: CAPABILITY EVALUATED • Promotion is bounded and versioned")
