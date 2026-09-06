@@ -249,6 +249,27 @@ class AnneTinker(tk.Tk):
             trace.append("11 ANSWER | Güvenli transfer cevabı üretilemedi; aday korunuyor.")
             return "Bu yüzde ifadesi için öğrenme adayı oluşturuldu ancak güvenli cevap üretilemedi.", trace
 
+        # Learned conversational capabilities are routed before the generic
+        # Turkish language fallback so the visible trace matches the actual
+        # capability-memory decision.
+        greeting_learner = self.language.greeting_learner
+        if greeting_learner.matches(user_input):
+            learned = greeting_learner.answer_from_memory(user_input)
+            if learned is not None:
+                answer, trace = learned
+                trace = list(trace)
+                trace.append(f"07 ANSWER | {answer}")
+                return f"Öğrenilmiş yetenek kullanıldı. {answer}", trace
+
+            result = greeting_learner.learn(user_input)
+            trace = list(result.trace)
+            if result.answer is not None and result.candidate.promotion_ready():
+                trace.append(f"12 ANSWER | {result.answer}")
+                self.result_queue.put(("capability_refresh", None))
+                return f"Yeni yetenek doğrulandı ve belleğe alındı. {result.answer}", trace
+            trace.append("12 ANSWER | Güvenli greeting cevabı üretilemedi; aday korunuyor.")
+            return "Bu selamlama için güvenli cevap üretilemedi.", trace
+
         analysis = self.language.analyze(user_input)
         trace = [
             "01 OBSERVE | Kullanıcı girdisi alındı.",
