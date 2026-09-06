@@ -15,7 +15,9 @@ def test_greeting_learning_promotes_and_reuses(tmp_path: Path) -> None:
 
     answer, trace = learner.answer_from_memory("merhabalar") or (None, [])
     assert answer == "Merhaba!"
-    assert "no web research required" not in " ".join(trace).lower()
+    trace_text = " ".join(trace)
+    assert "CAPABILITY CHECK | turkish_greeting_v1 = PROMOTED" in trace_text
+    assert "Existing promoted capability reused" in trace_text
 
 
 def test_language_engine_routes_greeting(tmp_path: Path, monkeypatch) -> None:
