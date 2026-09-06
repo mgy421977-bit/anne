@@ -1,7 +1,7 @@
 """Generic public-web research for ANNE.
 
 The web layer is topic-agnostic. It searches unknown questions without
-hard-coding GES, BESS, RES, HES, EPC, or any other domain vocabulary.
+hard-coding domain vocabulary.
 """
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ class WebResearcher:
         full_text = f"{title_text} {body}"
         token = re.escape(acronym)
 
-        # Explicit expansion/definition patterns are strongest and domain-neutral.
+        # Generic explicit expansion/definition patterns.
         expansion_patterns = (
             rf"\([^)]{{2,120}}\b{token}\b[^)]{{0,120}}\)",
             rf"\b{token}\b\s+(?:stands?\s+for|means|refers?\s+to)\b",
@@ -176,22 +176,9 @@ class WebResearcher:
         if any(re.search(pattern, full_text, flags=re.I) for pattern in expansion_patterns):
             return True
 
-        # A bare uppercase occurrence is not sufficient. It must have a
-        # definition-like contextual signal, otherwise disambiguation pages such
-        # as "Bess or BESS may refer to..." are rejected.
-        uppercase_occurrences = re.findall(rf"\b{token}\b", full_text)
-        if uppercase_occurrences:
-            definition_markers = (
-                "battery", "system", "energy", "storage", "computer", "protocol",
-                "standard", "technology", "software", "hardware", "network", "method",
-                "process", "device", "service", "organization", "programme", "program",
-                "platform", "model", "algorithm", "term", "abbreviation", "acronym",
-                "sistem", "teknoloji", "standardi", "terim",
-            )
-            normalized = cls._normalize(full_text)
-            if any(marker in normalized for marker in definition_markers):
-                return True
-
+        # A bare uppercase occurrence is not enough. This prevents generic
+        # disambiguation pages such as "Bess or BESS may refer to..." from
+        # becoming evidence for an acronym definition.
         normalized_body = cls._normalize(body)
         normalized_token = cls._normalize(acronym)
         occurrences = len(re.findall(rf"\b{re.escape(normalized_token)}\b", normalized_body))
