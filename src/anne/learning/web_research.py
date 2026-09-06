@@ -150,54 +150,51 @@ class WebResearcher:
         return None
 
     @classmethod
-    def _acronym_definition_context(cls, acronym: str, title: str, claim: str) -> bool:
-        """Return whether a result actually defines/uses an acronym as a term.
-
-        Mere occurrence is insufficient: names such as ``Bess`` and dictionary
-        disambiguation pages can contain the uppercase token without explaining
-        the requested concept. Accept common, domain-neutral definition forms
-        such as ``Full Name (ABC)``, ``ABC (Full Name)``, ``ABC stands for ...``
-        and ``ABC is ...``.
-        """
-        text = f"{title}. {claim}".strip()
-        token = re.escape(acronym)
-        patterns = (
-            rf"\b[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü\-]*(?:\s+[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü\-]*){{1,10}}\s*\(\s*{token}\s*\)",
-            rf"\b{token}\b\s*\(\s*[A-Za-zÇĞİÖŞÜçğıöşü][^)]{{2,120}}\)",
-            rf"\b{token}\b\s+(?:stands for|means|refers to|is|are|denotes|abbreviates)\b",
-            rf"\b{token}\b\s*[:\-]\s*[A-Za-zÇĞİÖŞÜçğıöşü]",
-        )
-        return any(re.search(pattern, text, flags=re.I) for pattern in patterns)
-
-    @classmethod
     def _acronym_matches(cls, query: str, title: str, claim: str) -> bool:
-        """Reject acronym/name collisions while requiring definition context."""
+        """Require semantic acronym evidence, not just an uppercase collision."""
         acronym = cls._acronym_token(query)
         if acronym is None:
             return True
 
-        # A result must demonstrate that the acronym is being used as a term,
-        # not merely contain the same letters as a person's name or title.
-        if not cls._acronym_definition_context(acronym, title, claim):
-            return False
-
-        # For explicit uppercase usage, definition context is sufficient.
-        if re.search(rf"\b{re.escape(acronym)}\b", f"{title} {claim}"):
-            return True
-
+        title_text = title.strip()
         body = claim.strip()
-        if title.strip() and re.match(rf"^{re.escape(title.strip())}\s*:\s*", body, flags=re.I):
+        if title_text and re.match(rf"^{re.escape(title_text)}\s*:\s*", body, flags=re.I):
             body = re.sub(
-                rf"^{re.escape(title.strip())}\s*:\s*",
-                "",
-                body,
-                count=1,
-                flags=re.I,
+                rf"^{re.escape(title_text)}\s*:\s*", "", body, count=1, flags=re.I
             )
 
-        normalized = cls._normalize(body)
-        token = cls._normalize(acronym)
-        occurrences = len(re.findall(rf"\b{re.escape(token)}\b", normalized))
+        full_text = f"{title_text} {body}"
+        token = re.escape(acronym)
+
+        # Explicit expansion/definition patterns are strongest and domain-neutral.
+        expansion_patterns = (
+            rf"\([^)]{{2,120}}\b{token}\b[^)]{{0,120}}\)",
+            rf"\b{token}\b\s+(?:stands?\s+for|means|refers?\s+to)\b",
+            rf"\b{token}\b\s+(?:is|are)\s+(?:an?|the)\b",
+            rf"\b(?:abbreviation|acronym)\s+(?:for|of)\b[^.{{0,120}}]*\b{token}\b",
+        )
+        if any(re.search(pattern, full_text, flags=re.I) for pattern in expansion_patterns):
+            return True
+
+        # A bare uppercase occurrence is not sufficient. It must have a
+        # definition-like contextual signal, otherwise disambiguation pages such
+        # as "Bess or BESS may refer to..." are rejected.
+        uppercase_occurrences = re.findall(rf"\b{token}\b", full_text)
+        if uppercase_occurrences:
+            definition_markers = (
+                "battery", "system", "energy", "storage", "computer", "protocol",
+                "standard", "technology", "software", "hardware", "network", "method",
+                "process", "device", "service", "organization", "programme", "program",
+                "platform", "model", "algorithm", "term", "abbreviation", "acronym",
+                "sistem", "teknoloji", "standardi", "terim",
+            )
+            normalized = cls._normalize(full_text)
+            if any(marker in normalized for marker in definition_markers):
+                return True
+
+        normalized_body = cls._normalize(body)
+        normalized_token = cls._normalize(acronym)
+        occurrences = len(re.findall(rf"\b{re.escape(normalized_token)}\b", normalized_body))
         return occurrences >= 2
 
     @classmethod
