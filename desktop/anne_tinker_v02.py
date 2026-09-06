@@ -1,11 +1,7 @@
-"""ANNE Windows Tinker v0.2.
-
-Extends the existing offline Tinker without removing its deterministic paths.
-Unknown questions are routed through:
-local capability/memory -> public web -> OpenRouter -> Gemini -> knowledge memory.
-"""
+"""ANNE Windows Tinker v0.2: offline runtime + evidence-gated knowledge learning."""
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -14,32 +10,78 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from anne.learning.knowledge_memory import KnowledgeMemory
 from anne.learning.knowledge_resolver import KnowledgeResolver
-
-# Import the proven v0.1 UI/runtime and extend only its unknown-question route.
 from anne_tinker import AnneTinker
 
 
 class AnneTinkerV02(AnneTinker):
-    """Keep the existing offline runtime and add web/API knowledge acquisition."""
+    """Keep v0.1 offline capabilities and add persistent terminology learning."""
+
+    _TERM_RE = re.compile(r"^\s*(.{1,80}?)\s*=\s*(.{1,200})\s*$")
+    _ACRONYM_RE = re.compile(r"\b([A-ZÇĞİÖŞÜ]{2,10})\b")
 
     def __init__(self) -> None:
         super().__init__()
         self.knowledge_resolver = KnowledgeResolver()
+        self.knowledge_memory = KnowledgeMemory(self.knowledge_resolver.memory.path)
         self.title("ANNE AI — Windows Tinker v0.2")
 
+    def _learn_user_terminology(self, user_input: str) -> tuple[str, list[str]] | None:
+        match = self._TERM_RE.match(user_input.strip())
+        if not match:
+            return None
+        term, meaning = match.groups()
+        if len(term.split()) > 8 or len(meaning.strip()) < 2:
+            return None
+        record = self.knowledge_memory.save_term(term=term, meaning=meaning, source="user")
+        return (
+            f"Öğrendim: {term.strip()} = {meaning.strip()}",
+            [
+                "01 OBSERVE | Kullanıcı açık bir kavram eşlemesi verdi.",
+                f"02 LEARN | {term.strip()} = {meaning.strip()}",
+                "03 MEMORY | Terminoloji kalıcı knowledge memory'ye kaydedildi.",
+                f"04 VERIFY | status=LEARNED_CANDIDATE; confidence={record['confidence']:.2f}; source=user.",
+                "05 ANSWER | Öğrenilen eşleştirme kabul edildi.",
+            ],
+        )
+
+    def _answer_from_learned_term(self, question: str) -> tuple[str, list[str]] | None:
+        for term in self._ACRONYM_RE.findall(question):
+            record = self.knowledge_memory.get_term(term)
+            if record and record.get("meaning"):
+                meaning = str(record["meaning"])
+                return (
+                    f"{term}: {meaning}.",
+                    [
+                        "01 OBSERVE | Soru alındı.",
+                        "02 CAPABILITY CHECK | PROMOTED capability yok; terminology memory kontrol ediliyor.",
+                        "03 MEMORY | Öğrenilmiş terminoloji eşleşmesi bulundu.",
+                        f"04 TERM | {term} = {meaning}",
+                        "05 VERIFY | Kullanıcı kaynaklı LEARNED_CANDIDATE kullanıldı.",
+                        "06 ROUTE | terminology memory → answer; web/API çağrısı yapılmadı.",
+                        "07 ANSWER | Yerel öğrenilmiş bilgi kullanıldı.",
+                    ],
+                )
+        return None
+
     def _execute_local(self, user_input: str) -> tuple[str, list[str]]:
-        """Preserve all v0.1 local capabilities; research only unknown questions."""
+        learned = self._learn_user_terminology(user_input)
+        if learned is not None:
+            return learned
+
         analysis = self.language.analyze(user_input)
         if analysis.intent != "question":
             return super()._execute_local(user_input)
 
+        local_term = self._answer_from_learned_term(user_input)
+        if local_term is not None:
+            return local_term
+
         resolution = self.knowledge_resolver.resolve(user_input)
         trace = list(resolution.trace)
         if resolution.answer is not None:
-            trace.append(
-                f"11 ANSWER | provider={resolution.provider or 'memory'}; confidence={resolution.confidence:.2f}"
-            )
+            trace.append(f"11 ANSWER | provider={resolution.provider or 'memory'}; confidence={resolution.confidence:.2f}")
             return resolution.answer, trace
 
         trace.append("11 ANSWER | Güvenilir dış kaynak cevabı alınamadı; ANNE cevap uydurmadı.")
