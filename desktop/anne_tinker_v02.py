@@ -31,18 +31,29 @@ class AnneTinkerV02(AnneTinker):
         match = self._TERM_RE.match(user_input.strip())
         if not match:
             return None
-        term, meaning = match.groups()
-        if len(term.split()) > 8 or len(meaning.strip()) < 2:
+        left, right = (part.strip() for part in match.groups())
+        if len(left.split()) > 8 or len(right) < 2:
             return None
+
+        # Canonicalize mappings such as ``Güneş Enerjisi Sistemi = GES`` so
+        # the searchable key is the acronym the user will ask about later.
+        left_acronym = self._ACRONYM_RE.fullmatch(left)
+        right_acronym = self._ACRONYM_RE.fullmatch(right)
+        if right_acronym and not left_acronym:
+            term, meaning = right, left
+        else:
+            term, meaning = left, right
+
         record = self.knowledge_memory.save_term(term=term, meaning=meaning, source="user")
         return (
-            f"Öğrendim: {term.strip()} = {meaning.strip()}",
+            f"Öğrendim: {left} = {right}",
             [
                 "01 OBSERVE | Kullanıcı açık bir kavram eşlemesi verdi.",
-                f"02 LEARN | {term.strip()} = {meaning.strip()}",
-                "03 MEMORY | Terminoloji kalıcı knowledge memory'ye kaydedildi.",
-                f"04 VERIFY | status=LEARNED_CANDIDATE; confidence={record['confidence']:.2f}; source=user.",
-                "05 ANSWER | Öğrenilen eşleştirme kabul edildi.",
+                f"02 LEARN | {left} = {right}",
+                f"03 NORMALIZE | canonical term={term}; meaning={meaning}",
+                "04 MEMORY | Terminoloji kalıcı knowledge memory'ye kaydedildi.",
+                f"05 VERIFY | status=LEARNED_CANDIDATE; confidence={record['confidence']:.2f}; source=user.",
+                "06 ANSWER | Öğrenilen eşleştirme kabul edildi.",
             ],
         )
 
