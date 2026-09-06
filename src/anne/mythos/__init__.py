@@ -14,6 +14,7 @@ from .engine import ExplorationMode, HypothesisCandidate, MitosEngine
 from .experience import ExperienceRecord, ExperienceStatus
 from .loop import DiscoveryBatch, MitosAnneLoop
 from .synthesis import MitosSynthesis, SynthesisFinding
+from .web_research import MitosResearchResult, MitosWebResearch
 
 __all__ = [
     "AgentRole",
@@ -34,4 +35,6 @@ __all__ = [
     "MitosAnneLoop",
     "MitosSynthesis",
     "SynthesisFinding",
+    "MitosResearchResult",
+    "MitosWebResearch",
 ]
