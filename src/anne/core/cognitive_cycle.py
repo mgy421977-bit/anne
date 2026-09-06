@@ -109,7 +109,8 @@ class CognitiveCycle:
         self.outcomes.append(outcome)
         if error is not None:
             self.prediction_errors.append(error)
-        self.status = CycleStatus.COMPLETED
+        if self.status is not CycleStatus.BLOCKED:
+            self.status = CycleStatus.COMPLETED
 
     def block(self, reason: str) -> None:
         self.safety_decision = {"allowed": False, "reason": reason}
