@@ -68,7 +68,7 @@ class WebResearcher:
 
     _ALIASES = {
         "ges": {"ges", "güneş", "gunes", "fotovoltaik", "photovoltaic", "solar", "pv"},
-        "bess": {"bess", "batarya", "battery", "enerji", "depolama", "storage"},
+        "bess": {"bess", "batarya", "battery", "enerji", "energy", "depolama", "storage"},
         "res": {"res", "rüzgar", "ruzgar", "wind", "türbin", "turbin"},
         "hes": {"hes", "hidroelektrik", "hydroelectric", "hidro", "su"},
         "epc": {"epc", "mühendislik", "muhendislik", "tedarik", "kurulum", "engineering", "procurement", "construction"},
@@ -76,8 +76,7 @@ class WebResearcher:
     }
 
     # Acronym matches must be supported by an expansion term, not merely the
-    # acronym itself. This blocks title collisions such as "Young Bess" while
-    # still accepting pages that explain Battery Energy Storage System (BESS).
+    # acronym itself. This blocks title collisions such as "Young Bess".
     _ACRONYM_EXPANSIONS = {
         "ges": {"güneş", "gunes", "solar", "fotovoltaik", "photovoltaic", "pv"},
         "bess": {"batarya", "battery", "enerji", "energy", "depolama", "storage"},
@@ -87,15 +86,21 @@ class WebResearcher:
         "athena": {"yapay", "zeka", "artificial", "intelligence"},
     }
 
-    # Direct encyclopedia titles are a rescue path for acronyms whose search
-    # engine results are noisy or empty. The page itself is still fetched from
-    # the public web and must pass the same relevance gate before becoming evidence.
+    # Canonical public-web rescue pages. These are source identifiers only;
+    # ANNE still fetches the page live and applies the normal relevance gate.
     _DIRECT_TITLES = {
         "bess": ("Battery energy storage system", "en"),
         "ges": ("Solar power", "en"),
         "res": ("Wind power", "en"),
         "hes": ("Hydroelectricity", "en"),
         "epc": ("Engineering, procurement, and construction", "en"),
+    }
+
+    _DIRECT_SOURCES = {
+        "bess": (
+            "U.S. Department of Energy — Battery Energy Storage System Evaluation Method",
+            "https://www.energy.gov/cmei/femp/articles/battery-energy-storage-system-evaluation-method",
+        ),
     }
 
     def _get_text(self, url: str) -> str:
@@ -152,8 +157,6 @@ class WebResearcher:
         for acronym, aliases in cls._ALIASES.items():
             if re.search(rf"\b{re.escape(acronym)}\b", normalized_query):
                 expansion_terms = cls._ACRONYM_EXPANSIONS.get(acronym, aliases - {acronym})
-                # The acronym itself is intentionally excluded: "Young Bess"
-                # must not qualify for the technical query "BESS nedir?".
                 if not any(re.search(rf"\b{re.escape(alias)}\b", normalized_text) for alias in expansion_terms):
                     return False
         return cls._relevance(query, claim, title) >= cls.minimum_relevance
@@ -193,6 +196,20 @@ class WebResearcher:
             return None
         score = self._relevance(query, extract, title)
         return EvidenceItem(source=f"Wikipedia ({language})", claim=f"{title}: {extract}", kind="web", provenance=url, confidence=min(0.95, 0.65 + score * 0.3))
+
+    def _direct_source(self, key: str, query: str) -> EvidenceItem | None:
+        source = self._DIRECT_SOURCES.get(key)
+        if not source:
+            return None
+        title, url = source
+        text = self._clean_html(self._get_text(url))
+        if not text or not self._is_relevant(query, text, title):
+            return None
+        score = self._relevance(query, text, title)
+        # Keep the evidence bounded; the source page is a rescue source, not a
+        # license to dump an entire HTML document into ANNE's memory.
+        claim = f"{title}: {text[:1800]}"
+        return EvidenceItem(source=title, claim=claim, kind="web", provenance=url, confidence=min(0.96, 0.72 + score * 0.24))
 
     def _duckduckgo_instant(self, query: str) -> EvidenceItem | None:
         encoded = urllib.parse.quote(query)
@@ -252,21 +269,22 @@ class WebResearcher:
             except Exception:
                 continue
 
-        # Deterministic rescue for recognized technical acronyms. This is still
-        # external web research: ANNE fetches a canonical encyclopedia page and
-        # applies the normal relevance gate. It prevents empty/noisy search
-        # listings from turning a known technical acronym into FAIL-CLOSED.
         for acronym in matched_acronyms:
             direct_title = self._DIRECT_TITLES.get(acronym)
-            if not direct_title:
-                continue
-            title, language = direct_title
+            if direct_title:
+                title, language = direct_title
+                try:
+                    summary = self._wikipedia_summary(title, language, query)
+                    if summary:
+                        self._add_unique(evidence, summary)
+                except Exception:
+                    pass
             try:
-                summary = self._wikipedia_summary(title, language, query)
-                if summary:
-                    self._add_unique(evidence, summary)
+                direct_source = self._direct_source(acronym, query)
+                if direct_source:
+                    self._add_unique(evidence, direct_source)
             except Exception:
-                continue
+                pass
 
         if len(evidence) < 2:
             try:
