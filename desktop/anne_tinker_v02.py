@@ -6,7 +6,6 @@ local capability/memory -> public web -> OpenRouter -> Gemini -> knowledge memor
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -16,12 +15,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anne.learning.knowledge_resolver import KnowledgeResolver
-from anne.language.tr.core import TurkishLanguageEngine
-from anne.learning.capability_memory import CapabilityMemory
-from anne.learning.percentage import PercentageLearner
-from anne.math.engine import MathEngine
-from anne.runtime.supervisor import DevelopmentProposal, DevelopmentSupervisor
-from anne.weather.open_meteo import OpenMeteoWeather
 
 # Import the proven v0.1 UI/runtime and extend only its unknown-question route.
 from anne_tinker import AnneTinker
