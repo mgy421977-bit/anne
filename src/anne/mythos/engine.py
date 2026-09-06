@@ -1,213 +1,131 @@
-"""Mythos – Curiosity & Hypothesis Engine."""
-
+"""MITOS hypothesis engine with backward-compatible legacy Mythos support."""
 from __future__ import annotations
 
-import json
 import os
 import random
 import time
+from dataclasses import dataclass
+from enum import Enum
 
 from anne.core.cognitive_state import Hypothesis
 
 try:
     import anthropic
-
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
 
+class ExplorationMode(str, Enum):
+    HYPOTHESIS = "hypothesis"
+    CURIOSITY = "curiosity"
+    ASSOCIATION = "association"
+
+
+@dataclass(frozen=True)
+class HypothesisCandidate:
+    id: str
+    goal: str
+    claim: str
+    mode: ExplorationMode
+    probability: float
+    discovery_value: float
+    novelty: float
+    testability: float
+    harm_risk: float
+    reversibility: float
+    expected_benefit: float
+    test_cost: float
+
+    def validate(self) -> None:
+        if not self.goal.strip() or not self.claim.strip():
+            raise ValueError("goal and claim are required")
+        for name in ("probability", "discovery_value", "novelty", "testability", "harm_risk", "reversibility", "expected_benefit", "test_cost"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be in [0, 1]")
+
+
 class MythosEngine:
-    """Curiosity loop that generates and tests hypotheses.
+    """Legacy curiosity engine retained for existing ANNE callers."""
 
-    When ANTHROPIC_API_KEY is present, uses Claude for real hypothesis
-    generation. Otherwise falls back to a deterministic placeholder.
-    """
-
-    SYSTEM_PROMPT = (
-        "Sen MYTHOS merak motorusun. Görevin bir konuyu derinlemesine "
-        "araştırmak için hipotezler üret.\n\n"
-        "Kurallar:\n"
-        "1. Her hipotez somut, test edilebilir bir önerme olmalı\n"
-        "2. Olasılık değeri (0.01-0.99) gerçekçi olmalı — hiçbir hipotez 0 olamaz\n"
-        "3. Her iterasyonda önceki hipotezden öğrenerek güncelle\n"
-        "4. Yanıtını SADECE JSON formatında ver, başka hiçbir şey yazma\n\n"
-        "JSON formatı:\n"
-        "{\n"
-        '  "claim": "hipotez metni (Türkçe, 1-2 cümle)",\n'
-        '  "probability": 0.XX,\n'
-        '  "reasoning": "neden bu olasılık (1 cümle)"\n'
-        "}"
-    )
-
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
         self.iteration = 0
+        self.random = random.Random(seed)
         self.api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         self.use_api = ANTHROPIC_AVAILABLE and bool(self.api_key)
-        self.client = (
-            anthropic.Anthropic(api_key=self.api_key) if self.use_api else None
-        )
+        self.client = anthropic.Anthropic(api_key=self.api_key) if self.use_api else None
 
-    def generate_hypothesis(
-        self,
-        topic: str,
-        prior_confidence: float = 0.5,
-        previous_claim: str = "",
-    ) -> Hypothesis:
+    def generate_hypothesis(self, topic: str, prior_confidence: float = 0.5, previous_claim: str = "") -> Hypothesis:
         self.iteration += 1
         hyp_id = f"hyp_{int(time.time() * 1000)}_{self.iteration}"
-
-        if self.use_api:
-            return self._generate_via_api(
-                hyp_id, topic, prior_confidence, previous_claim
-            )
-        return self._generate_placeholder(hyp_id, topic, prior_confidence)
-
-    def _generate_via_api(
-        self, hyp_id: str, topic: str, prior: float, previous: str
-    ) -> Hypothesis:
-        client = self.client
-        if client is None:
-            return self._generate_placeholder(hyp_id, topic, prior)
-
-        user_msg = (
-            f'Konu: "{topic}"\n'
-            f"Önceki güven: {prior:.3f}\n"
-            f"Önceki hipotez: {previous if previous else 'Yok (ilk iterasyon)'}\n"
-            f"İterasyon: {self.iteration}\n\n"
-            "Bu konuda yeni bir hipotez üret. Önceki hipotezi geliştir "
-            "veya alternatif öner."
-        )
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=300,
-                system=self.SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_msg}],
-            )
-            first_block = response.content[0] if response.content else None
-            raw = str(getattr(first_block, "text", "")).strip()
-            if "```" in raw:
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            data = json.loads(raw)
-            claim = data.get("claim", f"API hypothesis: {topic}")
-            prob = max(0.01, min(0.99, float(data.get("probability", prior))))
-            delta = round(prob - prior, 3)
-            return Hypothesis(
-                id=hyp_id,
-                topic=topic,
-                claim=claim,
-                probability=round(prob, 3),
-                iteration=self.iteration,
-                confidence_delta=delta,
-                source="api",
-            )
-        except Exception:
-            return self._generate_placeholder(hyp_id, topic, prior)
-
-    def _generate_placeholder(
-        self, hyp_id: str, topic: str, prior: float
-    ) -> Hypothesis:
-        noise = random.uniform(-0.05, 0.1)
-        prob = max(0.01, min(0.99, prior + noise + (0.03 * self.iteration)))
-        delta = round(prob - prior, 3)
+        noise = self.random.uniform(-0.05, 0.1)
+        prob = max(0.01, min(0.99, prior_confidence + noise + (0.03 * self.iteration)))
+        delta = round(prob - prior_confidence, 3)
         level = "high" if prob > 0.7 else "medium" if prob > 0.4 else "low"
-        claim = (
-            f"[PH·{self.iteration}] '{topic}' — pattern detected "
-            f"with {level} confidence."
-        )
-        return Hypothesis(
-            id=hyp_id,
-            topic=topic,
-            claim=claim,
-            probability=round(prob, 3),
-            iteration=self.iteration,
-            confidence_delta=delta,
-            source="placeholder",
-        )
+        return Hypothesis(id=hyp_id, topic=topic, claim=f"[PH·{self.iteration}] '{topic}' — pattern detected with {level} confidence.", probability=round(prob, 3), iteration=self.iteration, confidence_delta=delta, source="placeholder")
 
     def test_hypothesis(self, h: Hypothesis) -> Hypothesis:
-        if self.use_api and h.source == "api":
-            return self._test_via_api(h)
-        return self._test_placeholder(h)
-
-    def _test_via_api(self, h: Hypothesis) -> Hypothesis:
-        client = self.client
-        if client is None:
-            return self._test_placeholder(h)
-
-        test_prompt = (
-            "Sen MYTHOS test motorusun. Bir hipotezi değerlendirip "
-            "sonucu JSON döndür.\n\n"
-            "JSON formatı:\n"
-            "{\n"
-            '  "outcome": "desteklendi/zayıf/reddedildi",\n'
-            '  "updated_probability": 0.XX,\n'
-            '  "finding": "kısa bulgu açıklaması (Türkçe)"\n'
-            "}"
-        )
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=200,
-                system=test_prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Hipotez: {h.claim}\n"
-                            f"Mevcut olasılık: {h.probability}"
-                        ),
-                    }
-                ],
-            )
-            first_block = response.content[0] if response.content else None
-            raw = str(getattr(first_block, "text", "")).strip()
-            if "```" in raw:
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            data = json.loads(raw)
-            h.tested = True
-            h.probability = max(
-                0.01,
-                min(0.99, float(data.get("updated_probability", h.probability))),
-            )
-            outcome = data.get("outcome", "?")
-            finding = data.get("finding", "")
-            h.result = f"[TEST-API] {outcome}: {finding}"
-            return h
-        except Exception:
-            return self._test_placeholder(h)
-
-    def _test_placeholder(self, h: Hypothesis) -> Hypothesis:
         h.tested = True
         outcome = "supported" if h.probability > 0.5 else "weak"
-        h.result = (
-            f"[TEST·{h.iteration}] {outcome}. "
-            f"p={h.probability:.3f} Δ={h.confidence_delta:+.3f}"
-        )
+        h.result = f"[TEST·{h.iteration}] {outcome}. p={h.probability:.3f} Δ={h.confidence_delta:+.3f}"
         return h
 
-    def curiosity_loop(
-        self,
-        topic: str,
-        max_iterations: int = 4,
-        prior: float = 0.5,
-    ) -> list[Hypothesis]:
-        """Generate → Test → Update → Repeat. Lowest probability is preserved."""
+    def curiosity_loop(self, topic: str, max_iterations: int = 4, prior: float = 0.5) -> list[Hypothesis]:
         hypotheses: list[Hypothesis] = []
         current_prior = prior
         previous_claim = ""
-
         for _ in range(max_iterations):
-            h = self.generate_hypothesis(topic, current_prior, previous_claim)
-            h = self.test_hypothesis(h)
+            h = self.test_hypothesis(self.generate_hypothesis(topic, current_prior, previous_claim))
             hypotheses.append(h)
             current_prior = h.probability
             previous_claim = h.claim
+        return sorted(hypotheses, key=lambda x: x.probability, reverse=True)
 
-        hypotheses.sort(key=lambda x: x.probability, reverse=True)
-        return hypotheses
+
+class MitosEngine:
+    """Bounded, deterministic candidate generator for the MITOS discovery API."""
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.random = random.Random(seed)
+        self._candidate_counter = 0
+
+    def generate(self, goal: str, batch_size: int = 10) -> list[HypothesisCandidate]:
+        if not goal.strip():
+            raise ValueError("goal is required")
+        if batch_size < 1:
+            raise ValueError("batch_size must be >= 1")
+        modes = list(ExplorationMode)
+        candidates: list[HypothesisCandidate] = []
+        for index in range(batch_size):
+            self._candidate_counter += 1
+            mode = modes[index % len(modes)]
+            probability = self.random.uniform(0.05, 0.95)
+            novelty = self.random.uniform(0.25, 0.95)
+            testability = self.random.uniform(0.45, 1.0)
+            expected_benefit = self.random.uniform(0.2, 1.0)
+            test_cost = self.random.uniform(0.05, 0.8)
+            discovery_value = round(0.30 * novelty + 0.25 * testability + 0.25 * expected_benefit + 0.20 * (1.0 - test_cost), 4)
+            candidate = HypothesisCandidate(
+                id=f"cand_{self._candidate_counter:08d}", goal=goal,
+                claim=self._claim(goal, mode, index), mode=mode,
+                probability=round(probability, 4), discovery_value=discovery_value,
+                novelty=round(novelty, 4), testability=round(testability, 4),
+                harm_risk=0.0, reversibility=1.0,
+                expected_benefit=round(expected_benefit, 4), test_cost=round(test_cost, 4),
+            )
+            candidate.validate()
+            candidates.append(candidate)
+        return candidates
+
+    @staticmethod
+    def _claim(goal: str, mode: ExplorationMode, index: int) -> str:
+        templates = {
+            ExplorationMode.HYPOTHESIS: "A testable pathway may satisfy the goal under bounded assumptions.",
+            ExplorationMode.CURIOSITY: "An overlooked constraint or opportunity may materially change the solution space.",
+            ExplorationMode.ASSOCIATION: "A cross-domain analogy may reveal a testable alternative pathway.",
+        }
+        return f"[{mode.value}:{index}] {templates[mode]} Goal: {goal}"
+
+
+__all__ = ["ExplorationMode", "HypothesisCandidate", "MythosEngine", "MitosEngine"]
