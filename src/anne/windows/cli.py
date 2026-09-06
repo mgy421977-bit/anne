@@ -1,9 +1,10 @@
-"""First Windows-facing ANNE console: Turkish motor + math + live weather."""
+"""Windows-facing ANNE console: local capabilities + generic knowledge routing."""
 from __future__ import annotations
 
 import os
 import re
 
+from anne.core.knowledge_router import KnowledgeRouter
 from anne.language.tr.core import TurkishLanguageEngine
 from anne.math.engine import MathEngine
 from anne.weather.open_meteo import OpenMeteoWeather
@@ -14,6 +15,7 @@ class AnneConsole:
         self.language = TurkishLanguageEngine()
         self.math = MathEngine()
         self.weather = OpenMeteoWeather()
+        self.knowledge = KnowledgeRouter()
         self.city = city or os.getenv("ANNE_LOCATION", "İzmir")
 
     def answer(self, text: str) -> str:
@@ -28,6 +30,12 @@ class AnneConsole:
             observation = self.weather.observe(self.city)
             # Weather remains ephemeral: do not write this observation to durable memory.
             return self.language.respond(analysis, weather=observation)
+        if analysis.intent == "question":
+            resolution = self.knowledge.resolve(text)
+            answer = resolution.resolution.answer
+            if answer is not None:
+                return answer
+            return "Güvenilir bir cevap üretilemedi; ANNE cevap uydurmadı."
         return self.language.respond(analysis)
 
 
@@ -44,7 +52,7 @@ def _extract_math_expression(text: str) -> str | None:
 
 def main() -> None:
     console = AnneConsole()
-    print("ANNE v0.1 — deterministik Türkçe + matematik motoru")
+    print("ANNE v0.1 — local-first Türkçe + matematik + evidence-gated knowledge")
     print(f"Konum: {console.city} | Çıkış: 'çık'")
     while True:
         try:
