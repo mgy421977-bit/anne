@@ -21,6 +21,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anne.language.tr.core import TurkishLanguageEngine
+from anne.learning.capability_memory import CapabilityMemory
 from anne.learning.percentage import PercentageLearner
 from anne.math.engine import MathEngine
 from anne.runtime.supervisor import DevelopmentProposal, DevelopmentSupervisor
@@ -43,9 +44,11 @@ class AnneTinker(tk.Tk):
         self.weather = OpenMeteoWeather()
         self.supervisor = DevelopmentSupervisor()
         self.percentage_learner = PercentageLearner()
+        self.capability_memory = CapabilityMemory(ROOT / ".anne_runtime" / "capabilities.json")
         self._build_ui()
         self._load_env_defaults()
         self._update_provider_fields()
+        self._refresh_capability_status()
         self.after(100, self._poll_results)
 
     def _build_ui(self) -> None:
@@ -90,27 +93,16 @@ class AnneTinker(tk.Tk):
         buttons.pack(side="right", fill="y", padx=(8, 0))
         ttk.Button(buttons, text="ANNE'ye Sor", command=self.send).pack(fill="x", pady=(0, 5))
         ttk.Button(buttons, text="Temizle", command=self._clear_input).pack(fill="x")
-        ttk.Label(
-            self.chat_tab,
-            text="Ctrl+Enter = gönder • Yerel motorlar önce çalışır • Cevap Silsilesi sekmesinde yürütme izini görebilirsin.",
-        ).pack(anchor="w", pady=(6, 0))
+        ttk.Label(self.chat_tab, text="Ctrl+Enter = gönder • Yerel motorlar önce çalışır • Cevap Silsilesi sekmesinde yürütme izini görebilirsin.").pack(anchor="w", pady=(6, 0))
 
     def _build_trace(self) -> None:
-        ttk.Label(
-            self.trace_tab,
-            text="Cevap Silsilesi — açıklanabilir yürütme izi (gizli düşünce değil)",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
+        ttk.Label(self.trace_tab, text="Cevap Silsilesi — açıklanabilir yürütme izi (gizli düşünce değil)", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         self.trace = scrolledtext.ScrolledText(self.trace_tab, wrap="word", font=("Consolas", 10))
         self.trace.pack(fill="both", expand=True, pady=(8, 0))
         self.trace.configure(state="disabled")
 
     def _build_mitos(self) -> None:
-        ttk.Label(
-            self.mitos_tab,
-            text="MITOS — hipotez ve alternatif üretimi. Sonuçlar otomatik olarak FACT kabul edilmez.",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
+        ttk.Label(self.mitos_tab, text="MITOS — hipotez ve alternatif üretimi. Sonuçlar otomatik olarak FACT kabul edilmez.", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         prompt = ttk.Frame(self.mitos_tab)
         prompt.pack(fill="x", pady=10)
         self.mitos_input = ttk.Entry(prompt)
@@ -121,11 +113,7 @@ class AnneTinker(tk.Tk):
         self.mitos_output.configure(state="disabled")
 
     def _build_learning(self) -> None:
-        ttk.Label(
-            self.learning_tab,
-            text="🧠 Öğrenme Lab — kanıt → hipotez → deney → transfer → regression → sandbox",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
+        ttk.Label(self.learning_tab, text="🧠 Öğrenme Lab — kanıt → hipotez → deney → transfer → regression → sandbox → promotion → capability memory", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         form = ttk.Frame(self.learning_tab)
         form.pack(fill="x", pady=10)
         self.learning_input = ttk.Entry(form)
@@ -134,16 +122,14 @@ class AnneTinker(tk.Tk):
         ttk.Button(form, text="Öğrenmeyi Başlat", command=self.run_learning).pack(side="right", padx=(8, 0))
         self.learning_status = ttk.Label(self.learning_tab, text="Status: READY • Capability: Turkish Percentage Reasoning")
         self.learning_status.pack(anchor="w", pady=(0, 6))
+        self.capability_status = ttk.Label(self.learning_tab, text="Promoted capabilities: 0")
+        self.capability_status.pack(anchor="w", pady=(0, 6))
         self.learning_output = scrolledtext.ScrolledText(self.learning_tab, wrap="word", font=("Consolas", 10))
         self.learning_output.pack(fill="both", expand=True)
         self.learning_output.configure(state="disabled")
 
     def _build_development(self) -> None:
-        ttk.Label(
-            self.dev_tab,
-            text="Geliştir — ANNE'nin değişiklik önermesi için kanıt kapısı",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w")
+        ttk.Label(self.dev_tab, text="Geliştir — ANNE'nin değişiklik önermesi için kanıt kapısı", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         form = ttk.Frame(self.dev_tab)
         form.pack(fill="x", pady=10)
         self.dev_goal = ttk.Entry(form)
@@ -173,10 +159,7 @@ class AnneTinker(tk.Tk):
         ttk.Label(config, text="GitHub repository").grid(row=1, column=2, sticky="w", padx=8, pady=6)
         self.repository = ttk.Entry(config)
         self.repository.grid(row=1, column=3, sticky="ew", padx=8, pady=6)
-        ttk.Label(
-            config,
-            text="API anahtarları GUI'ye kaydedilmez; environment variable kullanılabilir. Temel Tinker bunlara ihtiyaç duymaz.",
-        ).grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(4, 8))
+        ttk.Label(config, text="API anahtarları GUI'ye kaydedilmez; environment variable kullanılabilir. Temel Tinker bunlara ihtiyaç duymaz.").grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(4, 8))
 
     def _load_env_defaults(self) -> None:
         self.provider.set(os.getenv("ANNE_PROVIDER", "OpenRouter Free"))
@@ -197,6 +180,11 @@ class AnneTinker(tk.Tk):
             if not current or current == "gemini-3.7-flash":
                 self.model.delete(0, "end")
                 self.model.insert(0, os.getenv("ANNE_OPENROUTER_MODEL", DEFAULT_OR_MODEL))
+
+    def _refresh_capability_status(self) -> None:
+        count = len(self.capability_memory.list())
+        if hasattr(self, "capability_status"):
+            self.capability_status.configure(text=f"Promoted capabilities: {count} • Persistent store: .anne_runtime/capabilities.json")
 
     def _append(self, speaker: str, text: str) -> None:
         self.chat.configure(state="normal")
@@ -230,14 +218,35 @@ class AnneTinker(tk.Tk):
             self.result_queue.put(("error", str(exc)))
 
     def _execute_local(self, user_input: str) -> tuple[str, list[str]]:
-        """Run deterministic local capabilities and evidence-gated learning."""
+        """Run learned capabilities first; research only when capability is absent."""
         if self.percentage_learner.matches(user_input):
+            capability_id = "turkish_percentage_v1"
+            learned = self.capability_memory.get(capability_id)
+            if learned is not None and learned.get("status") == "PROMOTED":
+                answer = self.percentage_learner.solve(user_input)
+                if answer is not None:
+                    method = learned.get("method", "x * (y / 100)")
+                    trace = [
+                        "01 OBSERVE | Kullanıcı girdisi alındı.",
+                        f"02 CAPABILITY CHECK | {capability_id} = PROMOTED",
+                        f"03 MEMORY | persistent procedural capability; version={learned.get('version', 1)}",
+                        f"04 ROUTE | learned capability → {method}",
+                        f"05 COMPUTE | {answer}",
+                        "06 VERIFY | Deterministic Decimal calculation; web research not required.",
+                        "07 LEARNING | Existing promoted capability reused; no new candidate created.",
+                    ]
+                    return f"Öğrenilmiş yetenek kullanıldı. Sonuç: {answer}", trace
+
             result = self.percentage_learner.learn(user_input)
             trace = list(result.trace)
-            if result.answer is not None:
-                trace.append(f"11 ANSWER | Sonuç = {result.answer}")
-                return f"Öğrenme adayı doğrulandı. Sonuç: {result.answer}", trace
-            trace.append("11 ANSWER | Güvenli transfer cevabı üretilemedi; öğrenme adayı korunuyor.")
+            if result.answer is not None and result.candidate.promotion_ready():
+                record = self.capability_memory.promote(result.candidate)
+                trace.append(f"11 PROMOTION | {capability_id} = PROMOTED v{record['version']}")
+                trace.append("12 MEMORY | Kalıcı prosedürel yetenek kaydedildi; Python kodu değiştirilmedi.")
+                trace.append(f"13 ANSWER | Sonuç = {result.answer}")
+                self.result_queue.put(("capability_refresh", None))
+                return f"Yeni yetenek doğrulandı ve belleğe alındı. Sonuç: {result.answer}", trace
+            trace.append("11 ANSWER | Güvenli transfer cevabı üretilemedi; aday korunuyor.")
             return "Bu yüzde ifadesi için öğrenme adayı oluşturuldu ancak güvenli cevap üretilemedi.", trace
 
         analysis = self.language.analyze(user_input)
@@ -254,35 +263,29 @@ class AnneTinker(tk.Tk):
                 trace.append("06 VERIFY | Güvenli matematik ifadesi çıkarılamadı; işlem durduruldu.")
                 return "Matematik işlemini algıladım ama güvenli bir işlem ifadesi çıkaramadım.", trace
             calculation = self.math.calculate(expression)
-            trace.extend(
-                [
-                    "06 VALIDATE | AST yalnızca izinli sayısal düğümler ve + - * / ** % operatörlerini kabul ediyor.",
-                    f"07 COMPUTE | Decimal precision = 50; method = {calculation.method}",
-                    f"08 COMPUTE | {calculation.expression} = {calculation.value}",
-                    "09 VERIFY | Hesaplama deterministik olarak tamamlandı; dış model kullanılmadı.",
-                ]
-            )
+            trace.extend([
+                "06 VALIDATE | AST yalnızca izinli sayısal düğümler ve + - * / ** % operatörlerini kabul ediyor.",
+                f"07 COMPUTE | Decimal precision = 50; method = {calculation.method}",
+                f"08 COMPUTE | {calculation.expression} = {calculation.value}",
+                "09 VERIFY | Hesaplama deterministik olarak tamamlandı; dış model kullanılmadı.",
+            ])
             return f"Sonuç: {calculation.value}", trace
         if analysis.intent == "weather":
             city = os.getenv("ANNE_LOCATION", "İzmir")
             trace.append(f"05 ROUTE | weather → Open-Meteo observation; city = {city!r}")
             observation = self.weather.observe(city)
-            trace.extend(
-                [
-                    "06 OBSERVE | Güncel hava gözlemi alındı.",
-                    f"07 DATA | temperature_c = {observation.get('temperature_c')}; condition = {observation.get('condition')}",
-                    "08 MEMORY | durability = ephemeral; kalıcı belleğe yazılmadı.",
-                    "09 VERIFY | Kaynak gözlemi ile cevap oluşturuldu.",
-                ]
-            )
+            trace.extend([
+                "06 OBSERVE | Güncel hava gözlemi alındı.",
+                f"07 DATA | temperature_c = {observation.get('temperature_c')}; condition = {observation.get('condition')}",
+                "08 MEMORY | durability = ephemeral; kalıcı belleğe yazılmadı.",
+                "09 VERIFY | Kaynak gözlemi ile cevap oluşturuldu.",
+            ])
             return self.language.respond(analysis, weather=observation), trace
-        trace.extend(
-            [
-                "05 ROUTE | deterministic Turkish response; external model not required.",
-                "06 PARSE | morphology ve basit sentence-role heuristics uygulandı.",
-                "07 VERIFY | Yerel kapsamda güvenli cevap üretildi.",
-            ]
-        )
+        trace.extend([
+            "05 ROUTE | deterministic Turkish response; external model not required.",
+            "06 PARSE | morphology ve basit sentence-role heuristics uygulandı.",
+            "07 VERIFY | Yerel kapsamda güvenli cevap üretildi.",
+        ])
         return self.language.respond(analysis), trace
 
     @staticmethod
@@ -301,23 +304,9 @@ class AnneTinker(tk.Tk):
         if not question:
             return
         proposals = self.supervisor.propose(question, batch_size=5)
-        lines = [
-            f"MISSION: {question}",
-            "",
-            "MITOS → BOUNDED DEVELOPMENT PROPOSALS",
-            "Her aday hipotezdir; tek başına FACT değildir.",
-            "",
-        ]
+        lines = [f"MISSION: {question}", "", "MITOS → BOUNDED DEVELOPMENT PROPOSALS", "Her aday hipotezdir; tek başına FACT değildir.", ""]
         for index, proposal in enumerate(proposals, start=1):
-            lines.extend(
-                [
-                    f"[{index}] {proposal.decision.value} | {proposal.change}",
-                    f"    id={proposal.candidate_id}",
-                    f"    reason={proposal.reason}",
-                    f"    tests={'; '.join(proposal.required_tests)}",
-                    "",
-                ]
-            )
+            lines.extend([f"[{index}] {proposal.decision.value} | {proposal.change}", f"    id={proposal.candidate_id}", f"    reason={proposal.reason}", f"    tests={'; '.join(proposal.required_tests)}", ""])
         self._set_text(self.mitos_output, "\n".join(lines))
 
     def run_learning(self) -> None:
@@ -330,7 +319,35 @@ class AnneTinker(tk.Tk):
 
     def _learning_worker(self, question: str) -> None:
         try:
+            capability_id = "turkish_percentage_v1"
+            learned = self.capability_memory.get(capability_id)
+            if learned is not None and learned.get("status") == "PROMOTED":
+                answer = self.percentage_learner.solve(question)
+                if answer is not None:
+                    lines = [
+                        "🧠 LEARNING LAB",
+                        "=" * 72,
+                        f"Problem           : {question}",
+                        f"Capability        : {capability_id}",
+                        "Status            : PROMOTED / REUSED",
+                        f"Version           : {learned.get('version', 1)}",
+                        f"Method            : {learned.get('method', 'x * (y / 100)')}",
+                        "",
+                        "CAPABILITY MEMORY",
+                        "Persistent procedural capability bulundu.",
+                        "Research skipped; previously verified method reused.",
+                        "",
+                        f"Answer            : {answer}",
+                        "Verification      : deterministic Decimal calculation",
+                    ]
+                    self.result_queue.put(("learning_ok", ("\n".join(lines), None)))
+                    return
+
             result = self.percentage_learner.learn(question)
+            promoted = False
+            if result.answer is not None and result.candidate.promotion_ready():
+                self.capability_memory.promote(result.candidate)
+                promoted = True
             lines = [
                 "🧠 LEARNING LAB",
                 "=" * 72,
@@ -349,10 +366,12 @@ class AnneTinker(tk.Tk):
                 f"Sandbox           : {'PASS' if result.candidate.sandbox_passed else 'FAIL'}",
                 f"Confidence        : {result.candidate.confidence:.2f}",
                 f"Promotion ready   : {'YES' if result.candidate.promotion_ready() else 'NO'}",
+                f"Promotion result  : {'PROMOTED' if promoted else 'CANDIDATE ONLY'}",
                 "",
                 f"Answer            : {result.answer if result.answer is not None else 'NOT PROMOTED'}",
                 "",
-                "POLICY: Web evidence informs the candidate; production code is not rewritten automatically.",
+                "POLICY: Web evidence informs the candidate; production Python code is never rewritten automatically.",
+                "MEMORY: A promoted capability is a versioned procedural record stored outside git.",
             ]
             self.result_queue.put(("learning_ok", ("\n".join(lines), result)))
         except Exception as exc:
@@ -362,13 +381,7 @@ class AnneTinker(tk.Tk):
         goal = self.dev_goal.get().strip()
         proposals = self.supervisor.propose(goal, batch_size=1)
         proposal: DevelopmentProposal = proposals[0]
-        allowed = self.supervisor.promotion_allowed(
-            regression_passed=False,
-            capability_passed=False,
-            sandbox_passed=False,
-            policy_passed=True,
-            rollback_ready=True,
-        )
+        allowed = self.supervisor.promotion_allowed(regression_passed=False, capability_passed=False, sandbox_passed=False, policy_passed=True, rollback_ready=True)
         text = (
             f"GOAL\n{proposal.goal}\n\n"
             f"CANDIDATE\n{proposal.change}\n\n"
@@ -390,11 +403,14 @@ class AnneTinker(tk.Tk):
                     self._append("ANNE", answer)
                     self._set_text(self.trace, "\n".join(trace))
                     self.status.configure(text="LOCAL-FIRST • verified")
+                elif kind == "capability_refresh":
+                    self._refresh_capability_status()
                 elif kind == "learning_ok":
                     text, _result = payload  # type: ignore[misc]
                     self._set_text(self.learning_output, text)
-                    self.learning_status.configure(text="Status: CANDIDATE EVALUATED • Production promotion remains gated")
-                    self.status.configure(text="LEARNING • candidate evaluated")
+                    self._refresh_capability_status()
+                    self.learning_status.configure(text="Status: CAPABILITY EVALUATED • Promotion is bounded and versioned")
+                    self.status.configure(text="LEARNING • capability evaluated")
                 elif kind == "learning_error":
                     self._set_text(self.learning_output, f"Learning error: {payload}")
                     self.learning_status.configure(text="Status: ERROR • candidate not promoted")
