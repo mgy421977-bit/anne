@@ -1,4 +1,9 @@
-"""Deterministic evidence fusion for corroboration, contradiction and freshness."""
+"""Deterministic evidence fusion for corroboration and contradiction checks.
+
+Fusion is deliberately conservative: multiple snippets from the same source do
+not count as independent support. The layer does not prove truth; it decides
+whether retrieved evidence is sufficiently corroborated to support an answer.
+"""
 from __future__ import annotations
 
 import re
@@ -6,7 +11,6 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from anne.learning.evidence import EvidenceItem
-from anne.core.temporal_intelligence import apply_freshness
 
 
 @dataclass(frozen=True)
@@ -61,10 +65,7 @@ def _contradicts(a: str, b: str) -> bool:
 
 def fuse_evidence(items: list[EvidenceItem], *, authority_required: bool = False,
                   min_support: int = 2, min_confidence: float = 0.72) -> FusionResult:
-    temporal = apply_freshness("", items)
-    # The actual question is supplied through the optional attribute below by callers
-    # that need temporal gating; legacy callers retain the original behavior.
-    usable = list(temporal.usable)
+    usable = [i for i in items if i.claim.strip() and not i.simulated]
     usable.sort(key=lambda i: i.confidence, reverse=True)
     selected: list[EvidenceItem] = []
     domains: set[str] = set()
