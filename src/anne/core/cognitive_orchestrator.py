@@ -1,8 +1,8 @@
-"""Phase 1b executive orchestration with bounded recovery.
+"""Phase 1c executive orchestration with bounded recovery and ambiguity.
 
-Flow: FailFast → DUY → BAK → GÖR → MITOS → SELECT → ANLA → HİSSET → YAP.
+Flow: FailFast → DUY → BAK → AMBIGUITY → GÖR → MITOS → SELECT → ANLA → HİSSET → YAP.
 MITOS proposes; ANNE selects. Recovery can reframe a failed cycle but cannot
-bypass existing safety, semantic, ethics, or agency boundaries.
+bypass existing safety, semantic, evidence, ethics, or agency boundaries.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from uuid import uuid4
 
+from anne.core.ambiguity import AmbiguityBoundary
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.fail_fast import FailFastResult
 from anne.core.failure_recovery import FailureRecoveryController, FailureSignal
@@ -34,7 +35,7 @@ class OrchestrationResult:
 
 
 class CognitiveOrchestrator:
-    """Single guarded executive path with optional bounded recovery."""
+    """Single guarded executive path with bounded recovery and ambiguity."""
 
     def __init__(
         self,
@@ -75,7 +76,7 @@ class CognitiveOrchestrator:
 
     @staticmethod
     def _base_trace() -> list[str]:
-        return ["FAIL_FAST", "DUY", "BAK", "GÖR", "MITOS", "SELECT"]
+        return ["FAIL_FAST", "DUY", "BAK", "AMBIGUITY", "GÖR", "MITOS", "SELECT"]
 
     def run(
         self,
@@ -115,9 +116,48 @@ class CognitiveOrchestrator:
         while True:
             cycle_id = lineage[-1]
             if retry_count:
-                trace.extend(["DUY", "BAK", "GÖR", "MITOS", "SELECT"])
+                trace.extend(["DUY", "BAK", "AMBIGUITY", "GÖR", "MITOS", "SELECT"])
             state = self.pipeline.duy(current_question, people)
             state = self.pipeline.bak(state)
+            last_state = state
+
+            # Ambiguity is an early boundary: MITOS must never manufacture a
+            # missing intent for an underspecified request.
+            ambiguity = AmbiguityBoundary.decide(state.ambiguity)
+            state.context_map["ambiguity_level"] = ambiguity.level.value
+            state.context_map["ambiguity_action"] = ambiguity.action
+            if ambiguity.action == "ABSTAIN":
+                state.action = "ABSTAIN"
+                state.output = {
+                    "verdict": "ABSTAIN",
+                    "action": "HALT",
+                    "reason": ambiguity.reason,
+                    "ambiguity": state.ambiguity,
+                    "ambiguity_level": ambiguity.level.value,
+                }
+                return OrchestrationResult(
+                    "BOUNDED", ff, state, None,
+                    tuple(trace[:4]), ambiguity.reason,
+                    retry_count=retry_count,
+                    lineage=tuple(lineage),
+                    stop_reason="ambiguity_high",
+                )
+            if ambiguity.action == "CLARIFY":
+                state.action = "CLARIFY"
+                state.output = {
+                    "verdict": "CLARIFY",
+                    "action": "CLARIFY",
+                    "reason": "clarification_required",
+                    "ambiguity": state.ambiguity,
+                    "ambiguity_level": ambiguity.level.value,
+                }
+                return OrchestrationResult(
+                    "BOUNDED", ff, state, None,
+                    tuple(trace[:4]), "clarification_required",
+                    retry_count=retry_count,
+                    lineage=tuple(lineage),
+                    stop_reason="ambiguity_medium",
+                )
 
             from anne.mythos.engine import MitosEngine
 
@@ -129,7 +169,6 @@ class CognitiveOrchestrator:
                 engine=engine,
             )
             selection = self.selector.select(candidates, task_mode=task_mode)
-            last_state = state
             last_selection = selection
 
             if not selection.accepted or selection.candidate is None:
@@ -151,9 +190,6 @@ class CognitiveOrchestrator:
                     scale_role="frame",
                 )
                 last_reason = reason
-                # Preserve the historical Phase 1a contract for a direct
-                # selection boundary. Recovery metadata stays in memory; the
-                # exact initial-stage trace remains stable for callers/tests.
                 if retry_count == 0:
                     return OrchestrationResult(
                         "BOUNDED",
