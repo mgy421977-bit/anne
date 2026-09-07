@@ -6,8 +6,19 @@ not replace FailFast, semantic validation, ethics, or agency boundaries.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from anne.core.intent import IntentFrame
+
+
+class EvidenceStatus(StrEnum):
+    """Evidence states used at the BAK → ANLA boundary."""
+
+    AVAILABLE = "available"
+    MISSING = "missing"
+    CONFLICTING = "conflicting"
+    UNVERIFIED = "unverified"
+    NOT_REQUIRED = "not_required"
 
 
 @dataclass(frozen=True)
@@ -27,4 +38,4 @@ class CognitiveRequirements:
         )
 
 
-__all__ = ["CognitiveRequirements"]
+__all__ = ["CognitiveRequirements", "EvidenceStatus"]
