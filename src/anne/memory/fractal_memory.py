@@ -127,10 +127,30 @@ class FractalMemory:
                         (key,id_a,id_b,0.5,1 if conflict else 0,1 if resolved else 0,datetime.now().isoformat()))
         self.conn.commit()
 
+    @staticmethod
+    def _memory_terms(topic: str) -> list[str]:
+        """Create conservative lexical variants for inflected topic words.
+
+        This is intentionally small and deterministic. It improves recall for
+        Turkish suffixes such as ``kaynağı`` → ``kaynak`` without pretending
+        that lexical overlap is semantic proof.
+        """
+        terms: list[str] = []
+        for word in topic.casefold().split():
+            cleaned = "".join(ch for ch in word if ch.isalnum())
+            if len(cleaned) < 4:
+                continue
+            terms.append(cleaned)
+            for suffix in ("ları", "leri", "ının", "inin", "unu", "ünü", "ını", "ini", "nın", "nin", "yı", "yi", "ı", "i", "u", "ü"):
+                if cleaned.endswith(suffix) and len(cleaned) - len(suffix) >= 4:
+                    terms.append(cleaned[:-len(suffix)])
+                    break
+        return list(dict.fromkeys(terms))
+
     def get_similar_decisions(self, topic: str, limit: int = 3) -> list[tuple[Any,...]]:
         cur = self.conn.cursor()
         results: list[tuple[Any,...]] = []
-        for word in topic.lower().split():
+        for word in self._memory_terms(topic):
             rows = cur.execute("""SELECT d.verdict,d.total,d.reasoning,h.topic
                 FROM decisions d JOIN hypotheses h ON d.hypothesis_id=h.id
                 WHERE h.topic LIKE ? ORDER BY d.created_at DESC LIMIT ?""", (f"%{word}%",limit)).fetchall()
