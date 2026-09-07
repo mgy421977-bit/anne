@@ -39,7 +39,6 @@ def test_orchestrator_rejects_negative_retry_budget(tmp_path) -> None:
 
 def test_orchestrator_success_exposes_lineage(tmp_path) -> None:
     memory = FractalMemory(tmp_path / "anne.db")
-    pipeline = AnnePipeline(memory=memory)
     result = DecisionLoop(memory=memory).run_cognitive("2 + 2", seed=1)
     assert result.status in {"EXECUTED", "BOUNDED", "ABORTED"}
     assert result.lineage
@@ -65,3 +64,7 @@ def test_selector_result_contract_matches_candidate() -> None:
     assert result.candidate is candidate
     assert result.accepted is True
     assert result.considered == 1
+
+
+def test_task_mode_contract_remains_available() -> None:
+    assert TaskMode.TECHNICAL.value == "technical"
