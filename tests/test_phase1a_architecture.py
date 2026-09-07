@@ -129,6 +129,39 @@ def test_anla_rejection_forces_halt_before_action(tmp_path, monkeypatch):
     assert state.output["reason"] == "Semantic Validation Layer blocked output"
 
 
+def test_fractal_reframe_reenters_guarded_pipeline(tmp_path, monkeypatch):
+    memory = FractalMemory(str(tmp_path / "anne.db"))
+    pipeline = AnnePipeline(memory=memory)
+    calls: list[str] = []
+
+    original_run = pipeline.run_with_fail_fast
+
+    def wrapped_run(question, consciousnesses, hypothesis):
+        calls.append(hypothesis.source)
+        return original_run(question, consciousnesses, hypothesis)
+
+    monkeypatch.setattr(pipeline, "run_with_fail_fast", wrapped_run)
+    monkeypatch.setattr(
+        "anne.core.fractal_loop.generate_candidates",
+        lambda *args, **kwargs: [candidate()],
+    )
+
+    result = DecisionLoop(memory=memory, pipeline=pipeline).run_fractal(
+        "Resolve an unknown technical relation",
+        hypothesis=Hypothesis(
+            "root", "technical", "unknown claim", 0.2, source="test"
+        ),
+        budget=FractalBudget(max_depth=1, max_iterations=2),
+        task_mode=TaskMode.TECHNICAL,
+    )
+
+    assert len(calls) >= 1
+    assert all(source in {"test", "MITOS"} for source in calls)
+    if len(calls) > 1:
+        assert "MITOS" in calls[1:]
+    assert result.iterations <= 2
+
+
 def test_fractal_loop_has_hard_budget_and_scale_trace(tmp_path):
     memory = FractalMemory(str(tmp_path / "anne.db"))
     loop = DecisionLoop(memory=memory)
