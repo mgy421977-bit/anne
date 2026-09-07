@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from anne.core.decision_loop import DecisionLoop
+from anne.response_surface import ResponseComposer
 
 
 class Hearer(Protocol):
@@ -32,16 +33,19 @@ class Thinker(Protocol):
 
 @dataclass
 class AnneThinker:
-    """THINK adapter backed by the existing DecisionLoop."""
+    """THINK adapter backed by cognition and a user-facing response surface."""
 
     loop: DecisionLoop
+    composer: ResponseComposer | None = None
+
+    def __post_init__(self) -> None:
+        if self.composer is None:
+            self.composer = ResponseComposer()
 
     def think(self, text: str) -> str:
         result = self.loop.run_cognitive(text)
-        if result.state is not None and result.state.output:
-            output = result.state.output
-            return str(output.get("reason") or output.get("reasoning") or result.reason)
-        return result.reason or result.status
+        assert self.composer is not None
+        return self.composer.compose(text, result)
 
 
 class VoiceLoop:
