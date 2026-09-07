@@ -32,7 +32,7 @@ class AnneDesktop(tk.Tk):
 
     def __init__(self, loop: DecisionLoop | None = None) -> None:
         super().__init__()
-        self.loop = loop or DecisionLoop()
+        self.loop = loop
         self.title(APP_TITLE)
         self.geometry("900x720")
         self.minsize(760, 600)
@@ -101,7 +101,8 @@ class AnneDesktop(tk.Tk):
 
     def _run_cycle(self, raw_input: str) -> None:
         try:
-            result = self.loop.run_cognitive(raw_input)
+            loop = self.loop or DecisionLoop()
+            result = loop.run_cognitive(raw_input)
             self.after(0, self._render_result, result)
         except Exception as exc:  # noqa: BLE001 - surface runtime failures in the UI
             self.after(0, self._render_error, exc)
@@ -112,12 +113,15 @@ class AnneDesktop(tk.Tk):
             marker = "✓" if stage in trace else "○"
             self.stage_vars[stage].set(f"{marker} {stage}")
 
-        output = getattr(result, "output", {}) or {}
+        state = getattr(result, "state", None)
+        output = getattr(state, "output", {}) or {}
         selection = getattr(result, "selection", None)
+        ethic_score = getattr(state, "ethic_score", None)
+        context_map = getattr(state, "context_map", {}) or {}
         lines = [
             f"STATUS      : {getattr(result, 'status', 'UNKNOWN')}",
             f"REASON      : {getattr(result, 'reason', '') or '—'}",
-            f"VERDICT     : {output.get('verdict', getattr(result, 'status', 'UNKNOWN'))}",
+            f"VERDICT     : {output.get('verdict', '—')}",
             f"ACTION      : {output.get('action', '—')}",
             f"SOURCE      : {output.get('source', '—')}",
             f"CONFIDENCE  : {output.get('confidence', '—')}",
@@ -129,7 +133,14 @@ class AnneDesktop(tk.Tk):
                     f"SCORE       : {getattr(selection, 'score', '—')}",
                 ]
             )
-        lines.append(f"HYPOTHESIS  : {output.get('hypothesis', '—')}")
+        lines.extend(
+            [
+                f"ANLA SCORE  : {context_map.get('anla_score', '—')}",
+                f"ETHIC SCORE : {getattr(ethic_score, 'total', '—')}",
+                f"HYPOTHESIS  : {output.get('hypothesis', '—')}",
+                f"MEMORY      : anne.db",
+            ]
+        )
         self._show_result("\n".join(lines))
         self.status_var.set(str(getattr(result, "status", "DONE")))
         self.run_button.configure(state="normal")
