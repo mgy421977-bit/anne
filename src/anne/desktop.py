@@ -11,9 +11,11 @@ from tkinter import ttk
 from typing import Any
 
 from anne.core.decision_loop import DecisionLoop
+from anne.memory.fractal_memory import FractalMemory
 
 
 APP_TITLE = "ANNE AI — Adaptive Neural Nexus Engine"
+MEMORY_DB = "anne.db"
 STAGES = (
     "FAIL_FAST",
     "DUY",
@@ -101,7 +103,7 @@ class AnneDesktop(tk.Tk):
 
     def _run_cycle(self, raw_input: str) -> None:
         try:
-            loop = self.loop or DecisionLoop()
+            loop = self.loop or DecisionLoop(memory=FractalMemory(MEMORY_DB))
             result = loop.run_cognitive(raw_input)
             self.after(0, self._render_result, result)
         except Exception as exc:  # noqa: BLE001 - surface runtime failures in the UI
@@ -118,13 +120,19 @@ class AnneDesktop(tk.Tk):
         selection = getattr(result, "selection", None)
         ethic_score = getattr(state, "ethic_score", None)
         context_map = getattr(state, "context_map", {}) or {}
+        hypothesis = getattr(selection, "candidate", None) if selection is not None else None
+        hypothesis_text = (
+            getattr(hypothesis, "claim", None)
+            or output.get("hypothesis")
+            or "—"
+        )
         lines = [
             f"STATUS      : {getattr(result, 'status', 'UNKNOWN')}",
             f"REASON      : {getattr(result, 'reason', '') or '—'}",
-            f"VERDICT     : {output.get('verdict', '—')}",
-            f"ACTION      : {output.get('action', '—')}",
-            f"SOURCE      : {output.get('source', '—')}",
-            f"CONFIDENCE  : {output.get('confidence', '—')}",
+            f"VERDICT     : {output.get('verdict', getattr(state, 'action', '—'))}",
+            f"ACTION      : {output.get('action', getattr(state, 'action', '—'))}",
+            f"SOURCE      : {output.get('source', getattr(hypothesis, 'source', '—'))}",
+            f"CONFIDENCE  : {output.get('confidence', getattr(hypothesis, 'probability', '—'))}",
         ]
         if selection is not None:
             lines.extend(
@@ -137,8 +145,8 @@ class AnneDesktop(tk.Tk):
             [
                 f"ANLA SCORE  : {context_map.get('anla_score', '—')}",
                 f"ETHIC SCORE : {getattr(ethic_score, 'total', '—')}",
-                f"HYPOTHESIS  : {output.get('hypothesis', '—')}",
-                f"MEMORY      : anne.db",
+                f"HYPOTHESIS  : {hypothesis_text}",
+                f"MEMORY      : {MEMORY_DB} (persistent)",
             ]
         )
         self._show_result("\n".join(lines))
