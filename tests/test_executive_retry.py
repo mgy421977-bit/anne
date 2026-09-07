@@ -4,6 +4,7 @@ from anne.core.pipeline import AnnePipeline
 from anne.core.decision_loop import DecisionLoop
 from anne.memory.fractal_memory import FractalMemory
 from anne.mythos.candidate import HypothesisCandidate, SelectionResult, TaskMode
+from anne.mythos.engine import DiscoveryMode
 
 
 def _candidate(goal: str, claim: str, probability: float = 0.7) -> HypothesisCandidate:
@@ -12,6 +13,14 @@ def _candidate(goal: str, claim: str, probability: float = 0.7) -> HypothesisCan
         goal=goal,
         claim=claim,
         probability=probability,
+        mode=DiscoveryMode.DIVERGENT,
+        discovery_value=0.5,
+        novelty=0.5,
+        testability=0.5,
+        harm_risk=0.0,
+        reversibility=1.0,
+        expected_benefit=0.5,
+        test_cost=0.1,
     )
 
 
