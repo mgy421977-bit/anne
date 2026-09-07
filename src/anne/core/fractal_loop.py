@@ -1,7 +1,8 @@
-"""Bounded Fractal Thinking Loop for Phase 1a.
+"""Bounded Fractal Thinking Loop for Phase 1b.
 
-Frame → branch → reframe is an orchestration pattern, not an unrestricted
-recursive agent. Every branch re-enters the existing FailFast/ANLA/ethical path.
+Frame -> branch -> reframe -> retry is bounded orchestration, not an
+unrestricted recursive agent. Every retry re-enters the existing
+FailFast/ANLA/ethical path.
 """
 from __future__ import annotations
 
@@ -10,6 +11,10 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 from anne.core.cognitive_state import Consciousness, Hypothesis
+from anne.core.failure_recovery import (
+    FailureRecoveryController,
+    FailureSignal,
+)
 from anne.core.gap_fill import GapFiller
 from anne.core.pipeline import AnnePipeline
 from anne.core.resource_profile import ResourceProfile
@@ -79,18 +84,9 @@ class FractalThinkingLoop:
     @staticmethod
     def _gap(text: str) -> bool:
         markers = (
-            "unknown",
-            "uncertain",
-            "unclear",
-            "missing",
-            "unresolved",
-            "contradiction",
-            "gap",
-            "bilinmiyor",
-            "belirsiz",
-            "çelişki",
-            "eksik",
-            "kanıt yok",
+            "unknown", "uncertain", "unclear", "missing", "unresolved",
+            "contradiction", "gap", "bilinmiyor", "belirsiz", "çelişki",
+            "eksik", "kanıt yok",
         )
         lowered = text.lower()
         return any(marker in lowered for marker in markers)
@@ -133,12 +129,7 @@ class FractalThinkingLoop:
         people = list(parties) if parties else [Consciousness(id="user")]
         root_id = f"fc_{uuid4().hex[:12]}"
         root = FractalNode(
-            root_id,
-            None,
-            0,
-            "frame",
-            question,
-            hypothesis.claim,
+            root_id, None, 0, "frame", question, hypothesis.claim,
             metadata={"hypothesis_id": hypothesis.id},
         )
         nodes = [root]
@@ -146,9 +137,13 @@ class FractalThinkingLoop:
         current_question, current = question, hypothesis
         last_answer = current.claim
         iterations = 0
+        attempt = 0
+        seen_questions = {" ".join(question.lower().split())}
+        previous_confidence = 0.0
 
         while iterations < self.budget.max_iterations:
             iterations += 1
+            attempt += 1
             node = (
                 root
                 if iterations == 1
@@ -166,23 +161,15 @@ class FractalThinkingLoop:
                 nodes.append(node)
                 self._record(node, task_mode)
 
-            ff, state = self.pipeline.run_with_fail_fast(
-                current_question, people, current
-            )
+            ff, state = self.pipeline.run_with_fail_fast(current_question, people, current)
             if not ff.passed:
                 node.status = "failed"
                 node.stage_reached = "FAIL_FAST"
                 self._record(node, task_mode)
                 self._failure(node, ff.reason, task_mode)
                 return FractalResult(
-                    "aborted",
-                    "",
-                    root_id,
-                    current.claim,
-                    0.0,
-                    nodes,
-                    iterations,
-                    "fail_fast",
+                    "aborted", "", root_id, current.claim, 0.0,
+                    nodes, iterations, "fail_fast",
                 )
             assert state is not None
             node.stage_reached = "YAP"
@@ -200,40 +187,40 @@ class FractalThinkingLoop:
             )
             if state.logic_valid and not node.gap_detected:
                 node.status = "integrated"
+                node.metadata["post_retry"] = str(attempt > 1).lower()
+                node.metadata["confidence_delta"] = str(
+                    round(node.confidence - previous_confidence, 6)
+                )
                 self._record(node, task_mode)
                 return FractalResult(
-                    "completed",
-                    last_answer,
-                    root_id,
-                    current.claim,
-                    node.confidence,
-                    nodes,
-                    iterations,
-                    "validated",
+                    "completed", last_answer, root_id, current.claim,
+                    node.confidence, nodes, iterations, "validated",
                 )
+
+            failure_reason = str(
+                state.output.get("reason")
+                or state.output.get("reasoning")
+                or "logic_or_evidence_failure"
+            )
+            failure = FailureSignal(
+                kind=FailureRecoveryController.classify(failure_reason, node.stage_reached),
+                reason=failure_reason,
+                stage=node.stage_reached,
+                cycle_id=node.cycle_id,
+                depth=node.depth,
+            )
+            self._failure(node, failure_reason, task_mode)
 
             if node.depth >= self.budget.max_depth:
                 node.status = "stopped"
                 node.stage_reached = "REFRAME"
                 self._record(node, task_mode)
-                self._failure(
-                    node,
-                    "fractal_depth_budget_exhausted",
-                    task_mode,
-                )
+                self._failure(node, "fractal_depth_budget_exhausted", task_mode)
                 return FractalResult(
-                    "bounded",
-                    last_answer,
-                    root_id,
-                    current.claim,
-                    node.confidence,
-                    nodes,
-                    iterations,
-                    "max_depth",
+                    "bounded", last_answer, root_id, current.claim,
+                    node.confidence, nodes, iterations, "max_depth",
                 )
 
-            # Memory relations are priors, not truth. The gap filler requires
-            # sufficient agreement before a reframe is allowed.
             relations = self.memory.get_similar_decisions(current_question, limit=5)
             rules = self.memory.get_strong_rules(limit=5)
             _ = self.gap_filler.assess(
@@ -242,8 +229,11 @@ class FractalThinkingLoop:
                 low_score=state.priority_score,
                 high_score=max((float(r[1]) for r in rules), default=0.0),
             )
+            plan = FailureRecoveryController.plan(
+                failure, current_question, attempt=attempt,
+            )
             candidates = generate_candidates(
-                current_question,
+                plan.question,
                 batch_size=min(3, self.resource_profile.max_mitos_candidates),
             )
             selection = self.selector.select(candidates, task_mode=task_mode)
@@ -253,27 +243,39 @@ class FractalThinkingLoop:
                 self._record(node, task_mode)
                 self._failure(node, "gap_fill_abstain", task_mode)
                 return FractalResult(
-                    "bounded",
-                    last_answer,
-                    root_id,
-                    current.claim,
-                    node.confidence,
-                    nodes,
-                    iterations,
-                    "abstain",
+                    "bounded", last_answer, root_id, current.claim,
+                    node.confidence, nodes, iterations, "abstain",
                 )
 
             selected = selection.candidate
+            next_question = selected.goal
+            retry = FailureRecoveryController.authorize_retry(
+                attempt=attempt,
+                max_retries=max(0, self.budget.max_iterations - 1),
+                seen_questions=seen_questions,
+                question=next_question,
+            )
+            if not retry.allowed:
+                node.status = "stopped"
+                node.stage_reached = "STOP"
+                self._record(node, task_mode)
+                self._failure(node, retry.reason, task_mode)
+                return FractalResult(
+                    "bounded", last_answer, root_id, current.claim,
+                    node.confidence, nodes, iterations, retry.reason,
+                )
+
+            seen_questions.add(" ".join(next_question.lower().split()))
             reframe = FractalNode(
-                f"fc_{uuid4().hex[:12]}",
-                node.cycle_id,
-                node.depth + 1,
-                "reframe",
-                current_question,
-                selected.claim,
-                confidence=selection.score,
-                stage_reached="REFRAME",
-                metadata={"hypothesis_id": selected.id},
+                f"fc_{uuid4().hex[:12]}", node.cycle_id, node.depth + 1,
+                "reframe", plan.question, selected.claim,
+                confidence=selection.score, stage_reached="REFRAME",
+                metadata={
+                    "hypothesis_id": selected.id,
+                    "strategy": plan.strategy,
+                    "attempt": str(retry.next_attempt),
+                    "parent_failure": failure.kind.value,
+                },
             )
             nodes.append(reframe)
             self._record(reframe, task_mode)
@@ -284,28 +286,19 @@ class FractalThinkingLoop:
                 probability=selected.probability,
                 source="MITOS",
             )
-            current_question = selected.goal
-            reframe.status = "integrated"
-            reframe.stage_reached = "INTEGRATE"
+            current_question = next_question
+            previous_confidence = node.confidence
+            reframe.status = "retry_ready"
+            reframe.stage_reached = "RETRY"
             self._record(reframe, task_mode)
 
-        self._failure(
-            nodes[-1],
-            "fractal_iteration_budget_exhausted",
-            task_mode,
-        )
+        self._failure(nodes[-1], "fractal_iteration_budget_exhausted", task_mode)
         nodes[-1].status = "stopped"
         nodes[-1].stage_reached = "STOP"
         self._record(nodes[-1], task_mode)
         return FractalResult(
-            "bounded",
-            last_answer,
-            root_id,
-            current.claim,
-            nodes[-1].confidence,
-            nodes,
-            iterations,
-            "max_iterations",
+            "bounded", last_answer, root_id, current.claim,
+            nodes[-1].confidence, nodes, iterations, "max_iterations",
         )
 
 
