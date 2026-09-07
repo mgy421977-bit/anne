@@ -1,7 +1,7 @@
 from anne.core.cognitive_state import Consciousness, Hypothesis
+from anne.core.decision_loop import DecisionLoop
 from anne.core.pipeline import AnnePipeline
 from anne.memory.fractal_memory import FractalMemory
-from anne.core.decision_loop import DecisionLoop
 
 
 def test_yap_exposes_reason_for_approved_decision(tmp_path):
