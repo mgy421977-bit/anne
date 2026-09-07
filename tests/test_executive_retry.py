@@ -2,7 +2,7 @@ from anne.core.cognitive_orchestrator import CognitiveOrchestrator
 from anne.core.failure_recovery import FailureRecoveryController
 from anne.core.pipeline import AnnePipeline
 from anne.memory.fractal_memory import FractalMemory
-from anne.mythos.candidate import Candidate, SelectionResult, TaskMode
+from anne.mythos.candidate import HypothesisCandidate, SelectionResult, TaskMode
 
 
 def test_retry_controller_stops_repeated_frames() -> None:
@@ -34,3 +34,21 @@ def test_orchestrator_success_exposes_lineage(tmp_path) -> None:
     assert result.status in {"EXECUTED", "BOUNDED", "ABORTED"}
     assert result.lineage
     assert result.retry_count >= 0
+
+
+def _candidate(goal: str, claim: str, probability: float = 0.7) -> HypothesisCandidate:
+    return HypothesisCandidate(
+        id=goal.replace(" ", "_").lower(),
+        goal=goal,
+        claim=claim,
+        probability=probability,
+        source="test",
+    )
+
+
+def test_candidate_contract_matches_runtime() -> None:
+    candidate = _candidate("first", "first claim")
+    result = SelectionResult(candidate, True, 0.8, "accepted", 1)
+    assert result.candidate is candidate
+    assert result.accepted is True
+    assert TaskMode.GENERAL.value == "general"
