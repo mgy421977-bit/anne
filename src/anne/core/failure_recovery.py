@@ -74,7 +74,16 @@ class FailureRecoveryController:
             return FailureKind.SEMANTIC
         if "logic" in text or "invalid" in text:
             return FailureKind.LOGIC
-        if any(marker in text for marker in ("gap", "missing", "unknown", "uncertain")):
+        if any(
+            marker in text
+            for marker in (
+                "gap",
+                "missing",
+                "insufficient evidence",
+                "unknown",
+                "uncertain",
+            )
+        ):
             return FailureKind.EVIDENCE_GAP
         if "budget" in text or "iteration" in text or "depth" in text:
             return FailureKind.BUDGET
