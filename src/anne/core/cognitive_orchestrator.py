@@ -5,8 +5,8 @@ MITOS proposes; ANNE selects. Existing safety and semantic gates remain in path.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 from uuid import uuid4
 
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
@@ -59,7 +59,9 @@ class CognitiveOrchestrator:
         people = list(parties) if parties else [Consciousness(id="user")]
         ff = self.pipeline.fail_fast(raw_input)
         if not ff.passed:
-            return OrchestrationResult("ABORTED", ff, None, None, tuple(stage_trace), ff.reason)
+            return OrchestrationResult(
+                "ABORTED", ff, None, None, tuple(stage_trace), ff.reason
+            )
 
         stage_trace.append("DUY")
         state = self.pipeline.duy(raw_input, people)
@@ -68,12 +70,19 @@ class CognitiveOrchestrator:
         stage_trace.append("GÖR")
         goal = raw_input.strip()
         if not goal:
-            return OrchestrationResult("ABORTED", ff, state, None, tuple(stage_trace), "empty_input")
+            return OrchestrationResult(
+                "ABORTED", ff, state, None, tuple(stage_trace), "empty_input"
+            )
 
         stage_trace.append("MITOS")
         from anne.mythos.engine import MitosEngine
+
         engine = MitosEngine(seed=seed)
-        candidates = generate_candidates(goal, batch_size=self.candidate_batch_size, engine=engine)
+        candidates = generate_candidates(
+            goal,
+            batch_size=self.candidate_batch_size,
+            engine=engine,
+        )
         stage_trace.append("SELECT")
         selection = self.selector.select(candidates, task_mode=task_mode)
         if not selection.accepted or selection.candidate is None:
@@ -86,7 +95,14 @@ class CognitiveOrchestrator:
                 task_mode=task_mode.value,
                 scale_role="frame",
             )
-            return OrchestrationResult("BOUNDED", ff, state, selection, tuple(stage_trace), selection.reason)
+            return OrchestrationResult(
+                "BOUNDED",
+                ff,
+                state,
+                selection,
+                tuple(stage_trace),
+                selection.reason,
+            )
 
         selected = selection.candidate
         hypothesis = Hypothesis(
@@ -105,7 +121,9 @@ class CognitiveOrchestrator:
         stage_trace.append("YAP")
         state = self.pipeline.yap(state, hypothesis)
         status = "EXECUTED" if state.action != "HALT" else "ABORTED"
-        return OrchestrationResult(status, ff, state, selection, tuple(stage_trace), "")
+        return OrchestrationResult(
+            status, ff, state, selection, tuple(stage_trace), ""
+        )
 
 
 __all__ = ["CognitiveOrchestrator", "OrchestrationResult"]
