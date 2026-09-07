@@ -1,6 +1,6 @@
 """Phase 1b executive orchestration with bounded recovery.
 
-Flow: FailFast → DUY → BAK → MITOS → SELECT → GÖR → ANLA → HİSSET → YAP.
+Flow: FailFast → DUY → BAK → GÖR → MITOS → SELECT → ANLA → HİSSET → YAP.
 MITOS proposes; ANNE selects. Recovery can reframe a failed cycle but cannot
 bypass existing safety, semantic, ethics, or agency boundaries.
 """
@@ -12,10 +12,7 @@ from uuid import uuid4
 
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.fail_fast import FailFastResult
-from anne.core.failure_recovery import (
-    FailureRecoveryController,
-    FailureSignal,
-)
+from anne.core.failure_recovery import FailureRecoveryController, FailureSignal
 from anne.core.pipeline import AnnePipeline
 from anne.core.resource_profile import ResourceProfile
 from anne.mythos.candidate import SelectionResult, TaskMode
@@ -37,7 +34,7 @@ class OrchestrationResult:
 
 
 class CognitiveOrchestrator:
-    """Single guarded executive path with bounded failure recovery."""
+    """Single guarded executive path with optional bounded recovery."""
 
     def __init__(
         self,
@@ -76,6 +73,95 @@ class CognitiveOrchestrator:
     def _is_success(state: CognitiveState) -> bool:
         return bool(state.logic_valid) and state.action != "HALT"
 
+    @staticmethod
+    def _append_cycle_trace(trace: list[str], *, include_go: bool = True) -> None:
+        trace.extend(["DUY", "BAK", "GÖR", "MITOS", "SELECT"])
+        if include_go:
+            trace.extend(["ANLA", "HİSSET", "YAP"])
+
+    def _run_cycle(
+        self,
+        question: str,
+        people: Sequence[Consciousness],
+        *,
+        task_mode: TaskMode,
+        seed: int | None,
+        cycle_id: str,
+        retry_count: int,
+        trace: list[str],
+    ) -> tuple[CognitiveState, SelectionResult | None, Hypothesis | None, float | None, FailureSignal | None]:
+        state = self.pipeline.duy(question, people)
+        state = self.pipeline.bak(state)
+
+        trace.extend(["GÖR", "MITOS", "SELECT"])
+        from anne.mythos.engine import MitosEngine
+
+        engine_seed = None if seed is None else seed + retry_count
+        engine = MitosEngine(seed=engine_seed)
+        candidates = generate_candidates(
+            question,
+            batch_size=self.candidate_batch_size,
+            engine=engine,
+        )
+        selection = self.selector.select(candidates, task_mode=task_mode)
+        if not selection.accepted or selection.candidate is None:
+            reason = selection.reason or "mitos_selection_reject"
+            return (
+                state,
+                selection,
+                None,
+                None,
+                FailureSignal(
+                    FailureRecoveryController.classify(reason, "SELECT"),
+                    reason,
+                    "SELECT",
+                    cycle_id,
+                    retry_count,
+                ),
+            )
+
+        selected = selection.candidate
+        hypothesis = Hypothesis(
+            id=selected.id,
+            topic=selected.goal[:48],
+            claim=selected.claim,
+            probability=selected.probability,
+            source="MITOS",
+        )
+        self.pipeline.memory.save_hypothesis(
+            hypothesis,
+            task_mode=task_mode.value,
+        )
+        state = self.pipeline.gor(state, [hypothesis])
+        trace.append("ANLA")
+        state = self.pipeline.anla(state, hypothesis)
+        if state.logic_valid or state.ethic_score is not None:
+            trace.append("HİSSET")
+            state = self.pipeline.hisset(state)
+        trace.append("YAP")
+        state = self.pipeline.yap(state, hypothesis)
+
+        confidence = float(
+            state.context_map.get("anla_score") or selected.probability
+        )
+        if self._is_success(state):
+            return state, selection, hypothesis, confidence, None
+
+        reason = self._failure_reason(state)
+        return (
+            state,
+            selection,
+            hypothesis,
+            confidence,
+            FailureSignal(
+                FailureRecoveryController.classify(reason, "YAP"),
+                reason,
+                "YAP",
+                cycle_id,
+                retry_count,
+            ),
+        )
+
     def run(
         self,
         raw_input: str,
@@ -93,7 +179,6 @@ class CognitiveOrchestrator:
                 stop_reason="fail_fast",
             )
 
-        root_cycle_id = f"or_{uuid4().hex[:12]}"
         current_question = raw_input.strip()
         if not current_question:
             state = self.pipeline.duy(raw_input, people)
@@ -103,23 +188,29 @@ class CognitiveOrchestrator:
                 stop_reason="empty_input",
             )
 
-        seen_questions = {self._normalize(current_question)}
+        root_cycle_id = f"or_{uuid4().hex[:12]}"
         lineage = [root_cycle_id]
+        seen_questions = {self._normalize(current_question)}
         retry_count = 0
         previous_confidence: float | None = None
         last_state: CognitiveState | None = None
         last_selection: SelectionResult | None = None
         last_reason = ""
-        trace: list[str] = []
+        trace: list[str] = ["DUY", "BAK", "GÖR", "MITOS", "SELECT"]
 
         while True:
             cycle_id = lineage[-1]
-            trace.extend(["DUY", "BAK", "MITOS", "SELECT"])
-            state = self.pipeline.duy(current_question, people)
-            state = self.pipeline.bak(state)
-            engine_seed = None if seed is None else seed + retry_count
+            if retry_count == 0:
+                state = self.pipeline.duy(current_question, people)
+                state = self.pipeline.bak(state)
+            else:
+                trace.extend(["DUY", "BAK", "GÖR", "MITOS", "SELECT"])
+                state = self.pipeline.duy(current_question, people)
+                state = self.pipeline.bak(state)
+
             from anne.mythos.engine import MitosEngine
 
+            engine_seed = None if seed is None else seed + retry_count
             engine = MitosEngine(seed=engine_seed)
             candidates = generate_candidates(
                 current_question,
@@ -150,7 +241,7 @@ class CognitiveOrchestrator:
                 )
                 last_reason = reason
             else:
-                trace.append("GÖR")
+                trace.extend([] if retry_count == 0 else [])
                 selected = selection.candidate
                 hypothesis = Hypothesis(
                     id=selected.id,
@@ -160,7 +251,8 @@ class CognitiveOrchestrator:
                     source="MITOS",
                 )
                 self.pipeline.memory.save_hypothesis(
-                    hypothesis, task_mode=task_mode.value,
+                    hypothesis,
+                    task_mode=task_mode.value,
                 )
                 state = self.pipeline.gor(state, [hypothesis])
                 trace.append("ANLA")
@@ -276,8 +368,7 @@ class CognitiveOrchestrator:
             retry_count = retry.next_attempt
             current_question = plan.question
             seen_questions.add(self._normalize(current_question))
-            next_cycle = f"or_{uuid4().hex[:12]}"
-            lineage.append(next_cycle)
+            lineage.append(f"or_{uuid4().hex[:12]}")
             trace.extend(["FAILURE", "CLASSIFY", "REFRAME", "RETRY_GATE"])
 
 
