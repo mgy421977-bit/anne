@@ -12,6 +12,7 @@ from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
 from anne.core.fail_fast import FailFastGate, FailFastResult
 from anne.core.intent import IntentClassifier
+from anne.core.requirements import CognitiveRequirements
 from anne.memory.fractal_memory import FractalMemory
 
 
@@ -65,11 +66,29 @@ class AnnePipeline:
         state.requires_evidence = frame.requires_evidence
         state.requires_authority_check = frame.requires_authority_check
         state.ambiguity = frame.ambiguity
+        requirements = CognitiveRequirements.from_intent(frame)
+        state.authority_check_required = requirements.requires_authority_check
         return state
 
     def bak(self, state: CognitiveState) -> CognitiveState:
         past = self.memory.get_similar_decisions(state.raw_input)
         state.related_memories = past
+
+        if state.requires_evidence:
+            state.evidence_count = len(past)
+            if not past:
+                state.evidence_status = "missing"
+                state.evidence_verified = False
+            else:
+                # Memory matches are evidence references, not proof. Their
+                # presence is therefore explicitly unverified at this layer.
+                state.evidence_status = "unverified"
+                state.evidence_verified = False
+        else:
+            state.evidence_status = "not_required"
+            state.evidence_count = 0
+            state.evidence_verified = False
+
         rules = self.memory.get_strong_rules()
         state.context_map = {
             "input_type": state.input_type,
@@ -78,6 +97,11 @@ class AnnePipeline:
             "requires_evidence": state.requires_evidence,
             "requires_authority_check": state.requires_authority_check,
             "ambiguity": state.ambiguity,
+            "evidence_status": state.evidence_status,
+            "evidence_count": state.evidence_count,
+            "evidence_verified": state.evidence_verified,
+            "authority_check_required": state.authority_check_required,
+            "authority_check_passed": state.authority_check_passed,
             "consciousness_count": len(state.affected_consciousnesses),
             "past_similar_count": len(past),
             "has_prior_knowledge": len(past) > 0,
@@ -182,6 +206,17 @@ class AnnePipeline:
         group_a: Optional[Sequence[Consciousness]] = None,
         group_b: Optional[Sequence[Consciousness]] = None,
     ) -> CognitiveState:
+        if state.authority_check_required and not state.authority_check_passed:
+            state.action = "HALT"
+            state.output = {
+                "verdict": "HALT",
+                "action": "HALT",
+                "reason": "Agency boundary requires an authority check before action.",
+                "authority_check_required": True,
+                "authority_check_passed": False,
+            }
+            return state
+
         if not state.logic_valid and state.ethic_score is None:
             state.action = "REDDET"
             state.output = {
