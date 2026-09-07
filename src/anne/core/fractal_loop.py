@@ -91,6 +91,10 @@ class FractalThinkingLoop:
         lowered = text.lower()
         return any(marker in lowered for marker in markers)
 
+    @staticmethod
+    def _normalize_frame(text: str) -> str:
+        return " ".join(text.lower().split())
+
     def _record(self, node: FractalNode, task_mode: TaskMode) -> None:
         self.memory.save_scale_event(
             cycle_id=node.cycle_id,
@@ -138,7 +142,7 @@ class FractalThinkingLoop:
         last_answer = current.claim
         iterations = 0
         attempt = 0
-        seen_questions = {" ".join(question.lower().split())}
+        seen_questions = {self._normalize_frame(question)}
         previous_confidence = 0.0
 
         while iterations < self.budget.max_iterations:
@@ -185,12 +189,23 @@ class FractalThinkingLoop:
                 self._gap(current_question + " " + current.claim)
                 or not state.logic_valid
             )
+
             if state.logic_valid and not node.gap_detected:
-                node.status = "integrated"
+                improvement = node.confidence - previous_confidence
                 node.metadata["post_retry"] = str(attempt > 1).lower()
-                node.metadata["confidence_delta"] = str(
-                    round(node.confidence - previous_confidence, 6)
-                )
+                node.metadata["confidence_delta"] = str(round(improvement, 6))
+                if attempt > 1 and improvement <= 0.0:
+                    node.status = "stopped"
+                    node.stage_reached = "EVALUATE"
+                    node.metadata["post_retry_result"] = "no_improvement"
+                    self._record(node, task_mode)
+                    self._failure(node, "post_retry_no_improvement", task_mode)
+                    return FractalResult(
+                        "bounded", last_answer, root_id, current.claim,
+                        node.confidence, nodes, iterations, "no_improvement",
+                    )
+                node.status = "integrated"
+                node.metadata["post_retry_result"] = "improved" if attempt > 1 else "initial_valid"
                 self._record(node, task_mode)
                 return FractalResult(
                     "completed", last_answer, root_id, current.claim,
@@ -249,23 +264,28 @@ class FractalThinkingLoop:
 
             selected = selection.candidate
             next_question = selected.goal
+            normalized_plan = self._normalize_frame(plan.question)
+            normalized_next = self._normalize_frame(next_question)
             retry = FailureRecoveryController.authorize_retry(
                 attempt=attempt,
                 max_retries=max(0, self.budget.max_iterations - 1),
                 seen_questions=seen_questions,
-                question=next_question,
+                question=normalized_next,
             )
-            if not retry.allowed:
+            if not retry.allowed or normalized_plan in seen_questions:
+                reason = "oscillation_detected" if normalized_plan in seen_questions else retry.reason
                 node.status = "stopped"
                 node.stage_reached = "STOP"
+                node.metadata["stop_detail"] = reason
                 self._record(node, task_mode)
-                self._failure(node, retry.reason, task_mode)
+                self._failure(node, reason, task_mode)
                 return FractalResult(
                     "bounded", last_answer, root_id, current.claim,
-                    node.confidence, nodes, iterations, retry.reason,
+                    node.confidence, nodes, iterations, reason,
                 )
 
-            seen_questions.add(" ".join(next_question.lower().split()))
+            seen_questions.add(normalized_plan)
+            seen_questions.add(normalized_next)
             reframe = FractalNode(
                 f"fc_{uuid4().hex[:12]}", node.cycle_id, node.depth + 1,
                 "reframe", plan.question, selected.claim,
