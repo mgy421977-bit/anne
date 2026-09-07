@@ -1,19 +1,28 @@
 from anne.core.cognitive_state import Consciousness, Hypothesis
 from anne.core.decision_loop import DecisionLoop
 from anne.core.pipeline import AnnePipeline
-from anne.core.cognitive_orchestrator import CognitiveOrchestrator
-from anne.core.fail_fast import FailFastResult
 from anne.core.ambiguity import AmbiguityBoundary, AmbiguityLevel
 from anne.memory.fractal_memory import FractalMemory
-from anne.mythos.candidate import Candidate, TaskMode
+from anne.mythos.candidate import HypothesisCandidate, TaskMode
+from anne.mythos.engine import ExplorationMode
 from anne.mythos.selection import CandidateSelector
 from anne.mythos.gap_filler import GapFiller
 
 
 def candidate(harm_risk=0.1):
-    return Candidate(
-        id="c1", goal="bounded goal", claim="bounded claim", probability=0.9,
+    return HypothesisCandidate(
+        id="c1",
+        goal="bounded goal",
+        claim="bounded claim",
+        mode=ExplorationMode.HYPOTHESIS,
+        probability=0.9,
+        discovery_value=0.8,
+        novelty=0.7,
+        testability=0.9,
         harm_risk=harm_risk,
+        reversibility=1.0,
+        expected_benefit=0.8,
+        test_cost=0.2,
     )
 
 
