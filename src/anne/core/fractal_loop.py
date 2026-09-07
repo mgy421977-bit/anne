@@ -12,6 +12,7 @@ from uuid import uuid4
 from anne.core.cognitive_state import Consciousness, Hypothesis
 from anne.core.gap_fill import GapFiller
 from anne.core.pipeline import AnnePipeline
+from anne.core.resource_profile import ResourceProfile
 from anne.memory.fractal_memory import FractalMemory
 from anne.mythos.candidate import TaskMode
 from anne.mythos.generate import generate_candidates
@@ -56,10 +57,16 @@ class FractalThinkingLoop:
 
     def __init__(self, memory: FractalMemory, pipeline: AnnePipeline | None = None,
                  *, budget: FractalBudget | None = None, selector: CandidateSelector | None = None,
-                 gap_filler: GapFiller | None = None) -> None:
+                 gap_filler: GapFiller | None = None,
+                 resource_profile: ResourceProfile | None = None) -> None:
         self.memory = memory
         self.pipeline = pipeline or AnnePipeline(memory=memory)
-        self.budget = budget or FractalBudget()
+        self.resource_profile = resource_profile or ResourceProfile.minimal()
+        profile_budget = FractalBudget(
+            max_depth=self.resource_profile.max_fractal_depth,
+            max_iterations=self.resource_profile.max_iterations,
+        )
+        self.budget = budget or profile_budget
         self.selector = selector or CandidateSelector()
         self.gap_filler = gap_filler or GapFiller()
 
@@ -129,14 +136,11 @@ class FractalThinkingLoop:
             rules = self.memory.get_strong_rules(limit=5)
             assessment = self.gap_filler.assess(relations, rules,
                 low_score=state.priority_score, high_score=max((float(r[1]) for r in rules), default=0.0))
-            if not assessment.filled:
-                candidates = generate_candidates(current_question, batch_size=3)
-                selection = self.selector.select(candidates, task_mode=task_mode)
-            else:
-                # Even when memory closes the gap, the proposed claim still
-                # passes through the same ANNE selection gate.
-                candidates = generate_candidates(current_question, batch_size=3)
-                selection = self.selector.select(candidates, task_mode=task_mode)
+            candidates = generate_candidates(
+                current_question,
+                batch_size=min(3, self.resource_profile.max_mitos_candidates),
+            )
+            selection = self.selector.select(candidates, task_mode=task_mode)
             if not selection.accepted or selection.candidate is None:
                 node.status, node.stage_reached = "abstained", "GAP"; self._record(node, task_mode)
                 self._failure(node, "gap_fill_abstain", task_mode)
