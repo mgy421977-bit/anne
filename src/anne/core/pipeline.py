@@ -11,6 +11,7 @@ from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
 from anne.core.fail_fast import FailFastGate, FailFastResult
+from anne.core.intent import IntentClassifier
 from anne.memory.fractal_memory import FractalMemory
 
 
@@ -25,6 +26,7 @@ class AnnePipeline:
         max_anla_retries: int = MAX_ANLA_RETRIES,
         fail_fast_enabled: bool = True,
         fail_fast_gate: FailFastGate | None = None,
+        intent_classifier: IntentClassifier | None = None,
     ) -> None:
         self.memory = memory
         self.ethic = EthicCore()
@@ -33,6 +35,7 @@ class AnnePipeline:
         self.max_anla_retries = max_anla_retries
         self.fail_fast_enabled = fail_fast_enabled
         self.fail_fast_gate = fail_fast_gate or FailFastGate(enabled=fail_fast_enabled)
+        self.intent_classifier = intent_classifier or IntentClassifier()
 
     def fail_fast(self, raw_input: str) -> FailFastResult:
         """Deterministic pre-gate before cognitive stages."""
@@ -55,6 +58,13 @@ class AnnePipeline:
             state.input_type = "risk"
         else:
             state.input_type = "explore"
+
+        frame = self.intent_classifier.classify(raw_input)
+        state.intent = frame.intent.value
+        state.intent_confidence = frame.confidence
+        state.requires_evidence = frame.requires_evidence
+        state.requires_authority_check = frame.requires_authority_check
+        state.ambiguity = frame.ambiguity
         return state
 
     def bak(self, state: CognitiveState) -> CognitiveState:
@@ -63,6 +73,11 @@ class AnnePipeline:
         rules = self.memory.get_strong_rules()
         state.context_map = {
             "input_type": state.input_type,
+            "intent": state.intent,
+            "intent_confidence": state.intent_confidence,
+            "requires_evidence": state.requires_evidence,
+            "requires_authority_check": state.requires_authority_check,
+            "ambiguity": state.ambiguity,
             "consciousness_count": len(state.affected_consciousnesses),
             "past_similar_count": len(past),
             "has_prior_knowledge": len(past) > 0,
