@@ -54,6 +54,11 @@ class CognitiveState:
     # DUY
     raw_input: str = ""
     input_type: str = ""  # explore | conflict | query | risk
+    intent: str = "general"
+    intent_confidence: float = 0.0
+    requires_evidence: bool = False
+    requires_authority_check: bool = False
+    ambiguity: float = 1.0
 
     # BAK
     context_map: dict[str, Any] = field(default_factory=dict)
