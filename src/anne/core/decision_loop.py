@@ -50,8 +50,9 @@ class DecisionLoop:
         anla_enabled: bool = True,
         fail_fast_enabled: bool = True,
         resource_profile: ResourceProfile | None = None,
+        memory_db_path: str = "anne.db",
     ) -> None:
-        self.memory = memory or FractalMemory(":memory:")
+        self.memory = memory or FractalMemory(memory_db_path)
         self.pipeline = pipeline or AnnePipeline(
             memory=self.memory,
             anla_enabled=anla_enabled,
