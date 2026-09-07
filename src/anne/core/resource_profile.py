@@ -1,7 +1,7 @@
 """Substrate-aware resource budgeting for ANNE.
 
-ANNE's cognitive invariants are substrate-independent.  This module only
-controls how much bounded computation the host can afford.  It does not
+ANNE's cognitive invariants are substrate-independent. This module only
+controls how much bounded computation the host can afford. It does not
 change safety, semantic, provenance, or agency policy.
 """
 from __future__ import annotations
@@ -43,7 +43,9 @@ class ResourceProfile:
             raise ValueError("resource limits must be positive")
 
     @classmethod
-    def minimal(cls, substrate: Substrate = Substrate.CLASSICAL) -> "ResourceProfile":
+    def minimal(
+        cls, substrate: Substrate = Substrate.CLASSICAL
+    ) -> ResourceProfile:
         """Return the smallest useful bounded profile."""
         return cls(substrate=substrate)
 
@@ -53,7 +55,7 @@ class ResourceProfile:
         *,
         substrate: Substrate = Substrate.CLASSICAL,
         capacity: int = 1,
-    ) -> "ResourceProfile":
+    ) -> ResourceProfile:
         """Scale bounded exploration without changing cognitive invariants.
 
         Capacity is an abstract host budget, not a benchmark score and not a
