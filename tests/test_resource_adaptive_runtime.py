@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from anne.core.cognitive_orchestrator import CognitiveOrchestrator
 from anne.core.decision_loop import DecisionLoop
-from anne.core.fractal_loop import FractalThinkingLoop
+from anne.core.fractal_loop import FractalBudget, FractalThinkingLoop
 from anne.core.pipeline import AnnePipeline
 from anne.core.resource_profile import ResourceProfile, Substrate
 from anne.memory.fractal_memory import FractalMemory
@@ -38,9 +38,7 @@ def test_explicit_fractal_budget_remains_a_bounded_override() -> None:
     profile = ResourceProfile.scaled(capacity=4)
     loop = FractalThinkingLoop(
         memory,
-        budget=__import__("anne.core.fractal_loop", fromlist=["FractalBudget"]).FractalBudget(
-            max_depth=1, max_iterations=2
-        ),
+        budget=FractalBudget(max_depth=1, max_iterations=2),
         resource_profile=profile,
     )
     assert loop.budget.max_depth == 1
