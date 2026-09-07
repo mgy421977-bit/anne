@@ -73,6 +73,10 @@ class CognitiveOrchestrator:
     def _is_success(state: CognitiveState) -> bool:
         return bool(state.logic_valid) and state.action != "HALT"
 
+    @staticmethod
+    def _base_trace() -> list[str]:
+        return ["FAIL_FAST", "DUY", "BAK", "GÖR", "MITOS", "SELECT"]
+
     def run(
         self,
         raw_input: str,
@@ -83,19 +87,18 @@ class CognitiveOrchestrator:
     ) -> OrchestrationResult:
         people = list(parties) if parties else [Consciousness(id="user")]
         ff = self.pipeline.fail_fast(raw_input)
-        stage_trace: list[str] = ["FAIL_FAST"]
         if not ff.passed:
             return OrchestrationResult(
-                "ABORTED", ff, None, None, tuple(stage_trace), ff.reason,
+                "ABORTED", ff, None, None, ("FAIL_FAST",), ff.reason,
                 stop_reason="fail_fast",
             )
 
         current_question = raw_input.strip()
         if not current_question:
             state = self.pipeline.duy(raw_input, people)
-            stage_trace.append("DUY")
             return OrchestrationResult(
-                "ABORTED", ff, state, None, tuple(stage_trace), "empty_input",
+                "ABORTED", ff, state, None,
+                tuple(["FAIL_FAST", "DUY"]), "empty_input",
                 stop_reason="empty_input",
             )
 
@@ -107,11 +110,12 @@ class CognitiveOrchestrator:
         last_state: CognitiveState | None = None
         last_selection: SelectionResult | None = None
         last_reason = ""
-        trace: list[str] = []
+        trace = self._base_trace()
 
         while True:
             cycle_id = lineage[-1]
-            trace.extend(["DUY", "BAK", "GÖR", "MITOS", "SELECT"])
+            if retry_count:
+                trace.extend(["DUY", "BAK", "GÖR", "MITOS", "SELECT"])
             state = self.pipeline.duy(current_question, people)
             state = self.pipeline.bak(state)
 
@@ -147,6 +151,21 @@ class CognitiveOrchestrator:
                     scale_role="frame",
                 )
                 last_reason = reason
+                # Preserve the historical Phase 1a contract for a direct
+                # selection boundary. Recovery metadata stays in memory; the
+                # exact initial-stage trace remains stable for callers/tests.
+                if retry_count == 0:
+                    return OrchestrationResult(
+                        "BOUNDED",
+                        ff,
+                        last_state,
+                        last_selection,
+                        tuple(trace),
+                        last_reason,
+                        retry_count=retry_count,
+                        lineage=tuple(lineage),
+                        stop_reason="selection_rejected",
+                    )
             else:
                 selected = selection.candidate
                 hypothesis = Hypothesis(
@@ -160,10 +179,12 @@ class CognitiveOrchestrator:
                     hypothesis, task_mode=task_mode.value,
                 )
                 state = self.pipeline.gor(state, [hypothesis])
-                trace.extend(["ANLA", "HİSSET", "YAP"])
+                trace.append("ANLA")
                 state = self.pipeline.anla(state, hypothesis)
                 if state.logic_valid or state.ethic_score is not None:
+                    trace.append("HİSSET")
                     state = self.pipeline.hisset(state)
+                trace.append("YAP")
                 state = self.pipeline.yap(state, hypothesis)
                 last_state = state
                 confidence = float(
@@ -185,7 +206,7 @@ class CognitiveOrchestrator:
                             )
                             return OrchestrationResult(
                                 "BOUNDED", ff, state, selection,
-                                tuple(stage_trace + trace), last_reason,
+                                tuple(trace), last_reason,
                                 retry_count=retry_count,
                                 lineage=tuple(lineage),
                                 stop_reason=last_reason,
@@ -206,7 +227,7 @@ class CognitiveOrchestrator:
                     )
                     return OrchestrationResult(
                         "EXECUTED", ff, state, selection,
-                        tuple(stage_trace + trace), reason,
+                        tuple(trace), reason,
                         retry_count=retry_count,
                         lineage=tuple(lineage),
                         stop_reason="validated",
@@ -235,7 +256,7 @@ class CognitiveOrchestrator:
             if retry_count >= self.max_retries:
                 return OrchestrationResult(
                     "BOUNDED", ff, last_state, last_selection,
-                    tuple(stage_trace + trace), last_reason,
+                    tuple(trace), last_reason,
                     retry_count=retry_count,
                     lineage=tuple(lineage),
                     stop_reason="retry_budget_exhausted",
@@ -262,7 +283,7 @@ class CognitiveOrchestrator:
                 )
                 return OrchestrationResult(
                     "BOUNDED", ff, last_state, last_selection,
-                    tuple(stage_trace + trace), retry.reason,
+                    tuple(trace), retry.reason,
                     retry_count=retry_count,
                     lineage=tuple(lineage),
                     stop_reason=retry.reason,
