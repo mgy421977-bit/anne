@@ -53,6 +53,7 @@ class Prediction:
     confidence: float
     provenance: tuple[str, ...] = ()
     kind: EvidenceKind = EvidenceKind.PREDICTION
+    prediction_id: str = field(default_factory=lambda: f"pred_{uuid4().hex[:12]}")
 
 
 @dataclass(frozen=True)
@@ -109,7 +110,8 @@ class CognitiveCycle:
         self.outcomes.append(outcome)
         if error is not None:
             self.prediction_errors.append(error)
-        self.status = CycleStatus.COMPLETED
+        if self.status is not CycleStatus.BLOCKED:
+            self.status = CycleStatus.COMPLETED
 
     def block(self, reason: str) -> None:
         self.safety_decision = {"allowed": False, "reason": reason}
