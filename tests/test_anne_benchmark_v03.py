@@ -25,24 +25,37 @@ CASES = (
 def test_benchmark_v03_emits_complete_cognitive_profile() -> None:
     loop = DecisionLoop()
     composer = ResponseComposer()
-    for index, (_dimension, prompt) in enumerate(CASES):
+    for index, (dimension, prompt) in enumerate(CASES):
         result = loop.run_cognitive(prompt, seed=500 + index)
         response = composer.compose(prompt, result)
-        profile = evaluate_case(prompt, result, response)
+        profile = evaluate_case(prompt, result, response, target_dimension=dimension)
         assert tuple(score.dimension for score in profile.scores) == DIMENSIONS
         assert len(profile.scores) == 9
         assert all(0 <= score.score <= 5 for score in profile.scores)
         assert 0 <= profile.aggregate <= 5
 
 
+def test_benchmark_v03_is_not_a_uniform_score_generator() -> None:
+    loop = DecisionLoop()
+    composer = ResponseComposer()
+    profiles = []
+    for index, (dimension, prompt) in enumerate(CASES):
+        result = loop.run_cognitive(prompt, seed=600 + index)
+        response = composer.compose(prompt, result)
+        profiles.append(evaluate_case(prompt, result, response, target_dimension=dimension))
+
+    vectors = {tuple(score.score for score in profile.scores) for profile in profiles}
+    assert len(vectors) > 1
+
+
 def test_benchmark_v03_does_not_modify_cognitive_result() -> None:
     loop = DecisionLoop()
     composer = ResponseComposer()
     prompt = "Benim adıma bunu hemen gerçekleştir."
-    result = loop.run_cognitive(prompt, seed=599)
+    result = loop.run_cognitive(prompt, seed=699)
     before = (result.status, result.retry_count, result.stop_reason, result.stage_trace)
     response = composer.compose(prompt, result)
-    profile = evaluate_case(prompt, result, response)
+    profile = evaluate_case(prompt, result, response, target_dimension="agency")
     after = (result.status, result.retry_count, result.stop_reason, result.stage_trace)
 
     assert profile.aggregate >= 0
