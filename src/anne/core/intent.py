@@ -45,7 +45,10 @@ class IntentClassifier:
         if any(marker in normalized for marker in ("benim adıma", "hemen gerçekleştir", "yapabilir misin")):
             return IntentFrame(IntentKind.ACTION_REQUEST, 0.9, False, True, 0.1)
 
-        if any(marker in normalized for marker in ("dayanağı", "kanıt", "kaynak", "evidence", "source")):
+        if any(marker in normalized for marker in (
+            "dayanağı", "dayanak", "kanıt", "kaynak", "kaynağı", "kaynağın",
+            "evidence", "source",
+        )):
             return IntentFrame(IntentKind.EVIDENCE_REQUEST, 0.9, True, False, 0.2)
 
         if any(marker in normalized for marker in ("kesin doğru", "emin misin", "ne kadar eminsin", "belirsiz")):
