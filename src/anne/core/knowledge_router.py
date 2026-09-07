@@ -40,6 +40,22 @@ class _ResearchAwareResolver(KnowledgeResolver):
             return None
         return super()._term_answer(question)
 
+    def resolve(self, question: str) -> KnowledgeResolution:
+        resolution = super().resolve(question)
+        diagnostics = getattr(self.web, "last_diagnostics", None)
+        if not diagnostics:
+            return resolution
+        trace = list(resolution.trace)
+        trace.append("WEB DIAGNOSTICS | " + " | ".join(diagnostics[:12]))
+        return KnowledgeResolution(
+            answer=resolution.answer,
+            trace=tuple(trace),
+            provider=resolution.provider,
+            evidence=resolution.evidence,
+            confidence=resolution.confidence,
+            memory_hit=resolution.memory_hit,
+        )
+
 
 class KnowledgeRouter:
     """Route questions without creating domain-specific knowledge branches."""
