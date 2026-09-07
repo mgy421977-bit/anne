@@ -42,6 +42,14 @@ class IntentClassifier:
         if normalized in {"merhaba", "selam", "merhaba anne", "selam anne"}:
             return IntentFrame(IntentKind.GREETING, 1.0, False, False, 0.0)
 
+        # Deliberately underspecified references must be stopped before MITOS
+        # can invent the missing object or goal.
+        if any(marker in normalized for marker in (
+            "bunu yap", "bunu gerçekleştir", "şunu yap", "şunu gerçekleştir",
+            "onu yap", "onu gerçekleştir", "bir şey yap", "bir şey gerçekleştir",
+        )):
+            return IntentFrame(IntentKind.ACTION_REQUEST, 0.95, False, True, 0.9)
+
         if any(marker in normalized for marker in ("benim adıma", "hemen gerçekleştir", "yapabilir misin")):
             return IntentFrame(IntentKind.ACTION_REQUEST, 0.9, False, True, 0.1)
 
@@ -69,7 +77,7 @@ class IntentClassifier:
         if "?" in normalized or any(marker in normalized for marker in ("neden", "nasıl", "ne ", "why", "how")):
             return IntentFrame(IntentKind.QUESTION, 0.75, False, False, 0.35)
 
-        return IntentFrame(IntentKind.GENERAL, 0.55, False, False, 0.5)
+        return IntentFrame(IntentKind.GENERAL, 0.55, False, False, 0.45)
 
 
 __all__ = ["IntentClassifier", "IntentFrame", "IntentKind"]
