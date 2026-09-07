@@ -1,6 +1,6 @@
 """Deterministic candidate generation/selection boundary for MITOS.
 
-MITOS proposes alternatives; ANNE evaluates them.  This module is deliberately
+MITOS proposes alternatives; ANNE evaluates them. This module is deliberately
 LLM-free and network-free so the selection policy can be regression-tested
 independently of model quality.
 """
@@ -100,7 +100,7 @@ class CandidateSelector:
 
         relevance = self._relevance(context, content) if context else 1.0
         clarity = min(1.0, len(_WORD_RE.findall(content)) / 18.0)
-        anla = compute_anla_score(content, context) if context else 1.0
+        anla = compute_anla_score(content)
         consistency = 1.0 if not self._contradictory(content) else 0.25
         safety = 1.0
         ethics = 1.0 if str(candidate.metadata.get("ethics", "GREEN")).upper() != "YELLOW" else 0.6
