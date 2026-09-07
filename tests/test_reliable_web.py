@@ -17,3 +17,15 @@ def test_focus_queries_decompose_long_question_without_domain_rules():
 
 def test_focus_queries_keep_short_questions_cheap():
     assert ReliableWebResearcher._focus_queries("BESS nedir?") == []
+
+
+def test_loose_parser_recovers_bing_style_result():
+    html = (
+        '<li class="b_algo"><h2><a href="https://example.gov.tr/page">'
+        'Enerji verimliliği destekleri</a></h2></li>'
+    )
+    from anne.learning.reliable_web import _LooseSearchParser
+
+    parser = _LooseSearchParser()
+    parser.feed(html)
+    assert parser.results == [("Enerji verimliliği destekleri", "https://example.gov.tr/page", "")]
