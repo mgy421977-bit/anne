@@ -78,8 +78,8 @@ def _default_gap_detector(question: str, hypothesis: Hypothesis, node: FractalNo
     text = f"{question} {hypothesis.claim}".lower()
     markers = (
         "unknown", "uncertain", "unclear", "missing", "unresolved",
-        "contradiction", "gap", "?", "bilinmiyor", "belirsiz",
-        "çelişki", "eksik", "kanıt yok",
+        "contradiction", "gap", "bilinmiyor", "belirsiz", "çelişki",
+        "eksik", "kanıt yok",
     )
     return any(marker in text for marker in markers)
 
@@ -95,11 +95,7 @@ def _default_relation_scanner(question: str, node: FractalNode, memory: FractalM
 def _default_candidate_generator(
     question: str, relations: Sequence[Any], node: FractalNode
 ) -> Sequence[Hypothesis]:
-    """Convert persisted relation records into non-authoritative candidates.
-
-    This adapter intentionally assigns a modest prior and marks candidates as
-    memory-derived. It is not a claim that the remembered proposition is true.
-    """
+    """Convert persisted relation records into non-authoritative candidates."""
     candidates: list[Hypothesis] = []
     for index, relation in enumerate(relations[:5]):
         claim = str(relation[2] if len(relation) > 2 else relation[0])
@@ -121,8 +117,6 @@ def _default_validator(
     """Validate candidates conservatively against available relation evidence."""
     if not hypothesis.claim.strip():
         return False, 0.0, "empty_candidate"
-    # A memory relation is evidence of prior occurrence, not truth. Keep the
-    # score bounded and require the caller's downstream ANLA/semantic gate too.
     evidence_score = min(0.85, 0.55 + 0.05 * min(len(relations), 6))
     return True, evidence_score, "memory_relation_candidate"
 
@@ -203,12 +197,7 @@ class FractalCognitiveLoop:
         *,
         task_mode: str = "general",
     ) -> FractalResult:
-        """Run frame → branch → gap/reframe → validation → integration.
-
-        The normal path executes the existing six-stage pipeline. Recursive
-        expansion happens only when the gap detector requests it and budget
-        remains. Candidate truth is never inferred from confidence alone.
-        """
+        """Run frame → branch → gap/reframe → validation → integration."""
         parties = list(consciousnesses) if consciousnesses else [Consciousness(id="user")]
         root_id = f"fc_{uuid4().hex[:12]}"
         root = FractalNode(
@@ -247,11 +236,7 @@ class FractalCognitiveLoop:
             if not ff.passed:
                 self._failure(node, ff.reason, stage="FAIL_FAST")
                 self._record(node, status="failed", stage_reached="FAIL_FAST")
-                return FractalResult(
-                    status="aborted", answer="", root_cycle_id=root_id,
-                    selected_claim=current_hypothesis.claim, confidence=0.0,
-                    nodes=nodes, iterations=iterations, stop_reason="fail_fast",
-                )
+                return FractalResult("aborted", "", root_id, current_hypothesis.claim, 0.0, nodes, iterations, "fail_fast")
 
             assert state is not None
             last_answer = str(state.output.get("reasoning") or state.output.get("hypothesis") or current_hypothesis.claim)
@@ -262,31 +247,19 @@ class FractalCognitiveLoop:
             node.gap_detected = gap
             if not gap and state.logic_valid:
                 self._record(node, status="integrated", stage_reached="YAP")
-                return FractalResult(
-                    status="completed", answer=last_answer, root_cycle_id=root_id,
-                    selected_claim=current_hypothesis.claim, confidence=node.confidence,
-                    nodes=nodes, iterations=iterations, stop_reason="validated",
-                )
+                return FractalResult("completed", last_answer, root_id, current_hypothesis.claim, node.confidence, nodes, iterations, "validated")
 
             if node.depth >= self.budget.max_depth:
                 self._failure(node, "fractal_depth_budget_exhausted")
                 self._record(node, status="stopped", stage_reached="REFRAME")
-                return FractalResult(
-                    status="bounded", answer=last_answer, root_cycle_id=root_id,
-                    selected_claim=current_hypothesis.claim, confidence=node.confidence,
-                    nodes=nodes, iterations=iterations, stop_reason="max_depth",
-                )
+                return FractalResult("bounded", last_answer, root_id, current_hypothesis.claim, node.confidence, nodes, iterations, "max_depth")
 
             relations = list(self.relation_scanner(current_question, node, self.memory))
             candidates = list(self.candidate_generator(current_question, relations, node))
             if not candidates:
                 self._failure(node, "gap_detected_without_candidate")
                 self._record(node, status="stopped", stage_reached="GAP")
-                return FractalResult(
-                    status="bounded", answer=last_answer, root_cycle_id=root_id,
-                    selected_claim=current_hypothesis.claim, confidence=node.confidence,
-                    nodes=nodes, iterations=iterations, stop_reason="no_candidate",
-                )
+                return FractalResult("bounded", last_answer, root_id, current_hypothesis.claim, node.confidence, nodes, iterations, "no_candidate")
 
             best: tuple[Hypothesis, float, str] | None = None
             for candidate in candidates:
@@ -296,11 +269,7 @@ class FractalCognitiveLoop:
             if best is None:
                 self._failure(node, "all_gap_candidates_rejected")
                 self._record(node, status="rejected", stage_reached="VALIDATE")
-                return FractalResult(
-                    status="bounded", answer=last_answer, root_cycle_id=root_id,
-                    selected_claim=current_hypothesis.claim, confidence=node.confidence,
-                    nodes=nodes, iterations=iterations, stop_reason="candidate_rejected",
-                )
+                return FractalResult("bounded", last_answer, root_id, current_hypothesis.claim, node.confidence, nodes, iterations, "candidate_rejected")
 
             selected, score, reason = best
             reframe = FractalNode(
@@ -323,8 +292,4 @@ class FractalCognitiveLoop:
 
         self._failure(nodes[-1], "fractal_iteration_budget_exhausted")
         self._record(nodes[-1], status="stopped", stage_reached="STOP")
-        return FractalResult(
-            status="bounded", answer=last_answer, root_cycle_id=root_id,
-            selected_claim=current_hypothesis.claim, confidence=nodes[-1].confidence,
-            nodes=nodes, iterations=iterations, stop_reason="max_iterations",
-        )
+        return FractalResult("bounded", last_answer, root_id, current_hypothesis.claim, nodes[-1].confidence, nodes, iterations, "max_iterations")
