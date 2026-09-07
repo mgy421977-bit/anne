@@ -10,6 +10,7 @@ from typing import Any, Optional, Sequence
 from anne.core.anla_score import MAX_ANLA_RETRIES, DEFAULT_TAU, passes_anla
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.ethic_core import EthicCore
+from anne.core.evidence import EvidenceGate
 from anne.core.fail_fast import FailFastGate, FailFastResult
 from anne.core.intent import IntentClassifier
 from anne.core.requirements import CognitiveRequirements
@@ -44,9 +45,7 @@ class AnnePipeline:
             return FailFastResult(True, "fail_fast_disabled")
         return self.fail_fast_gate.check(raw_input)
 
-    def duy(
-        self, raw_input: str, consciousnesses: Sequence[Consciousness]
-    ) -> CognitiveState:
+    def duy(self, raw_input: str, consciousnesses: Sequence[Consciousness]) -> CognitiveState:
         state = CognitiveState()
         state.raw_input = raw_input
         state.affected_consciousnesses = list(consciousnesses)
@@ -80,8 +79,6 @@ class AnnePipeline:
                 state.evidence_status = "missing"
                 state.evidence_verified = False
             else:
-                # Memory matches are evidence references, not proof. Their
-                # presence is therefore explicitly unverified at this layer.
                 state.evidence_status = "unverified"
                 state.evidence_verified = False
         else:
@@ -109,9 +106,7 @@ class AnnePipeline:
         }
         return state
 
-    def gor(
-        self, state: CognitiveState, hypotheses: Sequence[Hypothesis]
-    ) -> CognitiveState:
+    def gor(self, state: CognitiveState, hypotheses: Sequence[Hypothesis]) -> CognitiveState:
         if not hypotheses:
             return state
         best = hypotheses[0]
@@ -119,25 +114,31 @@ class AnnePipeline:
         state.priority_score = best.probability
         lowest = hypotheses[-1]
         if lowest.probability < 0.3:
-            state.low_prob_preserved.append(
-                {
-                    "hypothesis": lowest.claim,
-                    "probability": lowest.probability,
-                    "note": "Low probability – preserved",
-                }
-            )
+            state.low_prob_preserved.append({
+                "hypothesis": lowest.claim,
+                "probability": lowest.probability,
+                "note": "Low probability – preserved",
+            })
         if state.related_memories:
             scores = [m[1] for m in state.related_memories if m[1]]
             if scores:
-                state.priority_score = (
-                    state.priority_score * 0.7 + (sum(scores) / len(scores)) * 0.3
-                )
+                state.priority_score = state.priority_score * 0.7 + (sum(scores) / len(scores)) * 0.3
         return state
 
-    def anla(
-        self, state: CognitiveState, hypothesis: Hypothesis
-    ) -> CognitiveState:
-        """Semantic Validation Layer + ethical synthesis."""
+    def anla(self, state: CognitiveState, hypothesis: Hypothesis) -> CognitiveState:
+        """Semantic validation and ethical synthesis, with evidence enforcement."""
+        if not EvidenceGate.allows_decision(
+            required=state.requires_evidence,
+            status=state.evidence_status,
+        ):
+            reason = EvidenceGate.reason(state.evidence_status)
+            state.logic_valid = False
+            state.ethic_score = None
+            state.context_map["evidence_gate"] = "blocked"
+            state.context_map["evidence_gate_reason"] = reason
+            return state
+
+        state.context_map["evidence_gate"] = "passed"
         text = hypothesis.claim or state.raw_input
         semantic_ok = True
         s_anla = 1.0
@@ -179,9 +180,7 @@ class AnnePipeline:
         )
         state.ethic_score = score
         state.logic_valid = score.total > 0.0
-        self.memory.save_learned_rule(
-            f"type:{state.input_type}→{score.verdict}", score.total
-        )
+        self.memory.save_learned_rule(f"type:{state.input_type}→{score.verdict}", score.total)
         return state
 
     def hisset(self, state: CognitiveState) -> CognitiveState:
@@ -199,13 +198,9 @@ class AnnePipeline:
         state.empathy_map = empathy_map
         return state
 
-    def yap(
-        self,
-        state: CognitiveState,
-        hypothesis: Hypothesis,
-        group_a: Optional[Sequence[Consciousness]] = None,
-        group_b: Optional[Sequence[Consciousness]] = None,
-    ) -> CognitiveState:
+    def yap(self, state: CognitiveState, hypothesis: Hypothesis,
+            group_a: Optional[Sequence[Consciousness]] = None,
+            group_b: Optional[Sequence[Consciousness]] = None) -> CognitiveState:
         if state.authority_check_required and not state.authority_check_passed:
             state.action = "HALT"
             state.output = {
@@ -214,6 +209,17 @@ class AnnePipeline:
                 "reason": "Agency boundary requires an authority check before action.",
                 "authority_check_required": True,
                 "authority_check_passed": False,
+            }
+            return state
+
+        if state.context_map.get("evidence_gate") == "blocked":
+            state.action = "ABSTAIN"
+            state.output = {
+                "verdict": "ABSTAIN",
+                "action": "HALT",
+                "reason": state.context_map.get("evidence_gate_reason", "Evidence requirement was not satisfied."),
+                "evidence_status": state.evidence_status,
+                "evidence_verified": state.evidence_verified,
             }
             return state
 
@@ -238,14 +244,8 @@ class AnnePipeline:
                 "verdict": verdict,
                 "action": "SEPARATE_SOLUTIONS",
                 "reason": rationale,
-                "group_a": {
-                    "for": [c.id for c in group_a],
-                    "recommendation": "Independent process for Group A",
-                },
-                "group_b": {
-                    "for": [c.id for c in group_b],
-                    "recommendation": "Independent process for Group B",
-                },
+                "group_a": {"for": [c.id for c in group_a], "recommendation": "Independent process for Group A"},
+                "group_b": {"for": [c.id for c in group_b], "recommendation": "Independent process for Group B"},
                 "note": "No side taken. 1 == 1.",
             }
             for ca in group_a:
@@ -260,9 +260,7 @@ class AnnePipeline:
                 "confidence": hypothesis.probability,
                 "reason": rationale,
                 "reasoning": rationale,
-                "empathy_summary": {
-                    cid: v["estimated_impact"] for cid, v in state.empathy_map.items()
-                },
+                "empathy_summary": {cid: v["estimated_impact"] for cid, v in state.empathy_map.items()},
             }
         else:
             output = {
@@ -278,17 +276,10 @@ class AnnePipeline:
         state.output = output
         return state
 
-    def run_with_fail_fast(
-        self,
-        raw_input: str,
-        consciousnesses: Sequence[Consciousness],
-        hypothesis: Hypothesis,
-    ) -> tuple[FailFastResult, CognitiveState | None]:
-        """Convenience: fail-fast then full stage chain if allowed.
-
-        Returns (fail_fast_result, state_or_None).
-        On fail-fast reject, writes an SFT with stage=FAIL_FAST and state is None.
-        """
+    def run_with_fail_fast(self, raw_input: str,
+                           consciousnesses: Sequence[Consciousness],
+                           hypothesis: Hypothesis) -> tuple[FailFastResult, CognitiveState | None]:
+        """Convenience: fail-fast then full stage chain if allowed."""
         ff = self.fail_fast(raw_input)
         if not ff.passed:
             self.memory.save_failure_trace(
