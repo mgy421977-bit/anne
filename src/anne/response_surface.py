@@ -61,9 +61,14 @@ class ResponseComposer:
         if normalized in {"görüşürüz", "hoşça kal", "bay bay"}:
             return "Görüşmek üzere."
 
+        if action == "CLARIFY" or reason == "clarification_required":
+            return "Bunu doğru yapabilmem için biraz daha netleştirir misin?"
+
         if status in {"BOUNDED", "REJECTED"}:
             if authority_required and not authority_passed:
                 return "Bu işlemi gerçekleştiremiyorum; gerekli yetki kontrolü geçilmedi."
+            if "ambiguous" in reason.lower() or "belirsiz" in reason.lower():
+                return "İstek yeterince açık değil. Ne yapmak istediğini biraz daha netleştirmen gerekiyor."
             return "Bu konuda yeterli güvenilir dayanak oluşmadı. Daha fazla kanıt veya daha net bir çerçeve gerekiyor."
 
         # Do not expose internal ethics/confidence fields such as
