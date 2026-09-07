@@ -2,22 +2,6 @@ from anne.learning.evidence import EvidenceItem
 from anne.learning.web_research import WebResearcher
 
 
-def test_unrelated_title_case_acronym_collision_is_rejected() -> None:
-    assert not WebResearcher._is_relevant(
-        "BESS nedir?",
-        "Young Bess was a historical drama film.",
-        "Young Bess",
-    )
-
-
-def test_acronym_expansion_result_is_accepted() -> None:
-    assert WebResearcher._is_relevant(
-        "BESS nedir?",
-        "A battery energy storage system (BESS) stores electrical energy for later use.",
-        "Battery energy storage system",
-    )
-
-
 def test_unrelated_ges_place_result_is_rejected() -> None:
     assert not WebResearcher._is_relevant(
         "GES nedir?",
@@ -34,7 +18,31 @@ def test_solar_ges_result_is_accepted() -> None:
     )
 
 
-def test_generic_question_is_relevant_without_domain_aliases() -> None:
+def test_title_case_acronym_collision_is_rejected() -> None:
+    assert not WebResearcher._is_relevant(
+        "BESS nedir?",
+        "Young Bess is a historical film title.",
+        "Young Bess",
+    )
+
+
+def test_wiktionary_acronym_disambiguation_is_rejected() -> None:
+    assert not WebResearcher._is_relevant(
+        "BESS nedir?",
+        "Bess: Look up Bess or BESS in Wiktionary, the free dictionary. Bess or BESS may refer to: Bess (name), a given name.",
+        "Bess",
+    )
+
+
+def test_real_acronym_result_is_accepted() -> None:
+    assert WebResearcher._is_relevant(
+        "BESS nedir?",
+        "BESS (Battery Energy Storage System) is a system for storing electrical energy.",
+        "Battery Energy Storage System",
+    )
+
+
+def test_generic_non_acronym_question_is_supported() -> None:
     assert WebResearcher._is_relevant(
         "Kuantum bilgisayar nedir?",
         "Kuantum bilgisayar, kuantum bitleri kullanarak hesaplama yapan bir bilgisayar türüdür.",
