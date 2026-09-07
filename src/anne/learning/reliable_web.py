@@ -9,9 +9,9 @@ changes. It does not add domain-specific facts.
 from __future__ import annotations
 
 import re
+import urllib.parse
 from html.parser import HTMLParser
 from typing import Iterable
-import urllib.parse
 
 from .evidence import EvidenceItem
 from .web_research import WebResearcher
@@ -27,29 +27,22 @@ class _LooseSearchParser(HTMLParser):
         self._href = ""
         self._snippet = ""
         self._mode: str | None = None
-        self._depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attrs_map = dict(attrs)
         classes = attrs_map.get("class") or ""
         href = attrs_map.get("href") or ""
-        if tag == "a" and (
-            "result-link" in classes
-            or "result__a" in classes
-            or "b_algo" in classes
-            or "bing" in classes.lower()
-        ):
+        if tag == "a" and ("result-link" in classes or "result__a" in classes):
             self._title = ""
             self._href = href
             self._snippet = ""
             self._mode = "title"
-            self._depth = 0
         elif tag == "h2" and self._mode is None:
             self._mode = "title_heading"
             self._title = ""
-            self._depth = 1
-        elif self._mode in {"title", "title_heading"} and tag in {"h2", "a"}:
-            self._depth += 1
+            self._href = ""
+        elif self._mode == "title_heading" and tag == "a":
+            self._href = href
         elif self._mode is None and any(marker in classes for marker in ("result__snippet", "b_caption")):
             self._mode = "snippet"
             self._snippet = ""
@@ -66,13 +59,11 @@ class _LooseSearchParser(HTMLParser):
             if title and self._href:
                 self.results.append((title, self._href, ""))
             self._mode = None
-            self._depth = 0
         elif self._mode == "title_heading" and tag == "h2":
             title = self._title.strip()
             if title and self._href:
                 self.results.append((title, self._href, ""))
             self._mode = None
-            self._depth = 0
         elif self._mode == "snippet" and self._snippet.strip():
             if self.results:
                 title, href, _ = self.results[-1]
