@@ -42,13 +42,21 @@ class IntentClassifier:
         if normalized in {"merhaba", "selam", "merhaba anne", "selam anne"}:
             return IntentFrame(IntentKind.GREETING, 1.0, False, False, 0.0)
 
-        # Deliberately underspecified references must be stopped before MITOS
-        # can invent the missing object or goal.
+        # Explicit deictic references with no recoverable object are high
+        # ambiguity: MITOS must not invent what "this/that" refers to.
         if any(marker in normalized for marker in (
             "bunu yap", "bunu gerçekleştir", "şunu yap", "şunu gerçekleştir",
-            "onu yap", "onu gerçekleştir", "bir şey yap", "bir şey gerçekleştir",
+            "onu yap", "onu gerçekleştir",
         )):
             return IntentFrame(IntentKind.ACTION_REQUEST, 0.95, False, True, 0.9)
+
+        # "Bir şey" expresses an action goal but leaves the object/goal open;
+        # keep this in the clarification band rather than treating it as a
+        # concrete action request.
+        if any(marker in normalized for marker in (
+            "bir şey yap", "bir şey gerçekleştir",
+        )):
+            return IntentFrame(IntentKind.ACTION_REQUEST, 0.9, False, True, 0.6)
 
         if any(marker in normalized for marker in ("benim adıma", "hemen gerçekleştir", "yapabilir misin")):
             return IntentFrame(IntentKind.ACTION_REQUEST, 0.9, False, True, 0.1)
