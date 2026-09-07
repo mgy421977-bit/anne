@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from anne.core.cognitive_state import Hypothesis
+from anne.core.cognitive_state import Consciousness, Hypothesis
 from anne.core.decision_loop import DecisionLoop
 from anne.core.fractal_loop import FractalBudget
 from anne.core.gap_fill import GapFiller
@@ -118,9 +118,7 @@ def test_anla_rejection_forces_halt_before_action(tmp_path, monkeypatch):
 
     ff, state = pipeline.run_with_fail_fast(
         "Evaluate this claim",
-        [Hypothesis.__annotations__ and __import__(
-            "anne.core.cognitive_state", fromlist=["Consciousness"]
-        ).Consciousness(id="user")],
+        [Consciousness(id="user")],
         hypothesis,
     )
 
