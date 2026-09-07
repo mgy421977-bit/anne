@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from uuid import uuid4
 from typing import Any
+from uuid import uuid4
 
 from anne.core.cognitive_orchestrator import CognitiveOrchestrator, OrchestrationResult
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
