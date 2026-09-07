@@ -11,11 +11,9 @@ from tkinter import ttk
 from typing import Any
 
 from anne.core.decision_loop import DecisionLoop
-from anne.memory.fractal_memory import FractalMemory
 
 
 APP_TITLE = "ANNE AI — Adaptive Neural Nexus Engine"
-MEMORY_DB = "anne.db"
 STAGES = (
     "FAIL_FAST",
     "DUY",
@@ -103,14 +101,15 @@ class AnneDesktop(tk.Tk):
 
     def _run_cycle(self, raw_input: str) -> None:
         try:
-            loop = self.loop or DecisionLoop(memory=FractalMemory(MEMORY_DB))
+            # Keep the SQLite connection in the worker thread that uses it.
+            loop = self.loop or DecisionLoop()
             result = loop.run_cognitive(raw_input)
             self.after(0, self._render_result, result)
         except Exception as exc:  # noqa: BLE001 - surface runtime failures in the UI
             self.after(0, self._render_error, exc)
 
     def _render_result(self, result: Any) -> None:
-        trace = getattr(result, "stage_trace", ())
+        trace = tuple(getattr(result, "stage_trace", ()) or ())
         for stage in STAGES:
             marker = "✓" if stage in trace else "○"
             self.stage_vars[stage].set(f"{marker} {stage}")
@@ -118,37 +117,40 @@ class AnneDesktop(tk.Tk):
         state = getattr(result, "state", None)
         output = getattr(state, "output", {}) or {}
         selection = getattr(result, "selection", None)
+        candidate = getattr(selection, "candidate", None) if selection else None
         ethic_score = getattr(state, "ethic_score", None)
         context_map = getattr(state, "context_map", {}) or {}
-        hypothesis = getattr(selection, "candidate", None) if selection is not None else None
-        hypothesis_text = (
-            getattr(hypothesis, "claim", None)
-            or output.get("hypothesis")
-            or "—"
-        )
+
+        verdict = output.get("verdict")
+        action = output.get("action")
+        source = output.get("source")
+        confidence = output.get("confidence")
+        hypothesis = output.get("hypothesis")
+        reason = getattr(result, "reason", "") or output.get("reason") or output.get("note")
+
+        # The executive orchestrator keeps the selected MITOS proposal in
+        # result.selection.  Use it as the UI source of truth when YAP output
+        # does not expose proposal metadata (e.g. a rejected/halting path).
+        if candidate is not None:
+            source = source or getattr(candidate, "source", None)
+            confidence = confidence if confidence is not None else getattr(candidate, "probability", None)
+            hypothesis = hypothesis or getattr(candidate, "claim", None)
+
         lines = [
             f"STATUS      : {getattr(result, 'status', 'UNKNOWN')}",
-            f"REASON      : {getattr(result, 'reason', '') or '—'}",
-            f"VERDICT     : {output.get('verdict', getattr(state, 'action', '—'))}",
-            f"ACTION      : {output.get('action', getattr(state, 'action', '—'))}",
-            f"SOURCE      : {output.get('source', getattr(hypothesis, 'source', '—'))}",
-            f"CONFIDENCE  : {output.get('confidence', getattr(hypothesis, 'probability', '—'))}",
+            f"REASON      : {reason or '—'}",
+            f"VERDICT     : {verdict or '—'}",
+            f"ACTION      : {action or '—'}",
+            f"SOURCE      : {source or '—'}",
+            f"CONFIDENCE  : {confidence if confidence is not None else '—'}",
+            f"SELECTED    : {getattr(selection, 'accepted', '—') if selection is not None else '—'}",
+            f"SCORE       : {getattr(selection, 'score', '—') if selection is not None else '—'}",
+            f"ANLA SCORE  : {context_map.get('anla_score', '—')}",
+            f"ETHIC SCORE : {getattr(ethic_score, 'total', '—')}",
+            f"HYPOTHESIS  : {hypothesis or '—'}",
+            "MEMORY      : anne.db (persistent)",
+            f"TRACE       : {' → '.join(trace) if trace else '—'}",
         ]
-        if selection is not None:
-            lines.extend(
-                [
-                    f"SELECTED    : {getattr(selection, 'accepted', '—')}",
-                    f"SCORE       : {getattr(selection, 'score', '—')}",
-                ]
-            )
-        lines.extend(
-            [
-                f"ANLA SCORE  : {context_map.get('anla_score', '—')}",
-                f"ETHIC SCORE : {getattr(ethic_score, 'total', '—')}",
-                f"HYPOTHESIS  : {hypothesis_text}",
-                f"MEMORY      : {MEMORY_DB} (persistent)",
-            ]
-        )
         self._show_result("\n".join(lines))
         self.status_var.set(str(getattr(result, "status", "DONE")))
         self.run_button.configure(state="normal")
