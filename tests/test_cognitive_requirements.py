@@ -1,4 +1,4 @@
-from anne.core.cognitive_state import Consciousness, Hypothesis
+from anne.core.cognitive_state import Consciousness, EthicScore, Hypothesis
 from anne.core.pipeline import AnnePipeline
 from anne.memory.fractal_memory import FractalMemory
 
@@ -21,15 +21,18 @@ def test_evidence_request_without_memory_is_explicitly_missing(tmp_path):
 
 def test_evidence_request_does_not_treat_memory_as_verified_truth(tmp_path):
     pipeline = make_pipeline(tmp_path)
+    consciousness = Consciousness(id="user")
+    hypothesis = Hypothesis("h1", "kaynak", "Prior source claim", 0.8, source="test")
+    pipeline.memory.save_hypothesis(hypothesis)
     pipeline.memory.save_decision(
         decision_id="d1",
         hyp_id="h1",
-        score=None,
-        consciousnesses=[Consciousness(id="user")],
+        score=EthicScore(0.8, 1.0, 0.1, 0.85, "ONAYLA"),
+        consciousnesses=[consciousness],
         stage="YAP",
         task_mode="general",
     )
-    state = pipeline.duy("Kaynağı nedir?", [Consciousness(id="user")])
+    state = pipeline.duy("Kaynağı nedir?", [consciousness])
     state = pipeline.bak(state)
 
     assert state.evidence_status == "unverified"
