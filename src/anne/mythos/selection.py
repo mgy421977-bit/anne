@@ -35,9 +35,21 @@ class CandidateSelector:
             eligible.append((score, candidate))
 
         if not eligible:
-            return SelectionResult(None, False, 0.0, "no_candidate_passed_hard_gate", considered)
+            return SelectionResult(
+                None,
+                False,
+                0.0,
+                "no_candidate_passed_hard_gate",
+                considered,
+            )
         score, candidate = max(eligible, key=lambda item: item[0])
-        return SelectionResult(candidate, True, round(score, 4), "selected_by_bounded_score", considered)
+        return SelectionResult(
+            candidate,
+            True,
+            round(score, 4),
+            "selected_by_bounded_score",
+            considered,
+        )
 
     @staticmethod
     def _score(candidate: HypothesisCandidate, task_mode: TaskMode) -> float:
