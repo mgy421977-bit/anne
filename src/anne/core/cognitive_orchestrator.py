@@ -12,6 +12,7 @@ from uuid import uuid4
 from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.fail_fast import FailFastResult
 from anne.core.pipeline import AnnePipeline
+from anne.core.resource_profile import ResourceProfile
 from anne.mythos.candidate import SelectionResult, TaskMode
 from anne.mythos.generate import generate_candidates
 from anne.mythos.selection import CandidateSelector
@@ -35,11 +36,16 @@ class CognitiveOrchestrator:
         pipeline: AnnePipeline,
         *,
         selector: CandidateSelector | None = None,
-        candidate_batch_size: int = 6,
+        candidate_batch_size: int | None = None,
+        resource_profile: ResourceProfile | None = None,
     ) -> None:
         self.pipeline = pipeline
         self.selector = selector or CandidateSelector()
-        self.candidate_batch_size = candidate_batch_size
+        self.resource_profile = resource_profile or ResourceProfile.minimal()
+        self.candidate_batch_size = min(
+            candidate_batch_size or self.resource_profile.max_mitos_candidates,
+            self.resource_profile.max_mitos_candidates,
+        )
 
     def run(
         self,
