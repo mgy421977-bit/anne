@@ -135,7 +135,12 @@ class CognitiveOrchestrator:
                 task_mode=task_mode.value,
             )
         return OrchestrationResult(
-            status, ff, state, selection, tuple(stage_trace), ""
+            status,
+            ff,
+            state,
+            selection,
+            tuple(stage_trace),
+            str(state.output.get("reason") or state.output.get("reasoning") or ""),
         )
 
 
