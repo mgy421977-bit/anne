@@ -60,6 +60,13 @@ class CognitiveState:
     requires_authority_check: bool = False
     ambiguity: float = 1.0
 
+    # Cognitive requirements / evidence boundary
+    evidence_status: str = "not_required"  # available | missing | conflicting | unverified
+    evidence_count: int = 0
+    evidence_verified: bool = False
+    authority_check_required: bool = False
+    authority_check_passed: bool = False
+
     # BAK
     context_map: dict[str, Any] = field(default_factory=dict)
     related_memories: list[Any] = field(default_factory=list)
