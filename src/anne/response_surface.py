@@ -19,12 +19,31 @@ class ResponseComposer:
     def compose(self, user_text: str, result: Any) -> str:
         status = str(getattr(result, "status", "")).upper()
         reason = str(getattr(result, "reason", "") or "")
-        verdict = str(getattr(result, "verdict", "") or "").upper()
-        action = str(getattr(result, "action", "") or "").upper()
+        state = getattr(result, "state", None)
+        state_output = getattr(state, "output", {}) or {}
+        verdict = str(
+            getattr(result, "verdict", "")
+            or state_output.get("verdict", "")
+        ).upper()
+        action = str(
+            getattr(result, "action", "")
+            or getattr(state, "action", "")
+            or state_output.get("action", "")
+        ).upper()
+        authority_required = bool(
+            getattr(state, "authority_check_required", False)
+            or state_output.get("authority_check_required", False)
+        )
+        authority_passed = bool(
+            getattr(state, "authority_check_passed", False)
+            or state_output.get("authority_check_passed", False)
+        )
 
         # Safety/agency outcomes must remain explicit and must never be
         # softened by the presentation layer.
         if status == "ABORTED" or action == "HALT" or verdict in {"FAIL_FAST", "REDDET"}:
+            if authority_required and not authority_passed:
+                return "Bu işlemi gerçekleştiremiyorum; gerekli yetki kontrolü geçilmedi."
             if "agency" in reason.lower() or "yetki" in reason.lower():
                 return "Bu işlemi gerçekleştiremiyorum; yetki sınırı nedeniyle durdum."
             return "Bu isteği güvenli sınırlar içinde gerçekleştiremiyorum."
@@ -43,6 +62,8 @@ class ResponseComposer:
             return "Görüşmek üzere."
 
         if status in {"BOUNDED", "REJECTED"}:
+            if authority_required and not authority_passed:
+                return "Bu işlemi gerçekleştiremiyorum; gerekli yetki kontrolü geçilmedi."
             return "Bu konuda yeterli güvenilir dayanak oluşmadı. Daha fazla kanıt veya daha net bir çerçeve gerekiyor."
 
         # Do not expose internal ethics/confidence fields such as
