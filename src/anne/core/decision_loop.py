@@ -10,6 +10,7 @@ from anne.core.cognitive_state import CognitiveState, Consciousness, Hypothesis
 from anne.core.fail_fast import FailFastResult
 from anne.core.fractal_loop import FractalBudget, FractalResult, FractalThinkingLoop
 from anne.core.pipeline import AnnePipeline
+from anne.core.resource_profile import ResourceProfile
 from anne.memory.fractal_memory import FractalMemory
 from anne.mythos.candidate import TaskMode
 
@@ -36,11 +37,15 @@ class DecisionLoop:
     """Single entry point; ordinary and fractal paths retain all safety gates."""
 
     def __init__(self, memory: FractalMemory | None = None, pipeline: AnnePipeline | None = None,
-                 anla_enabled: bool = True, fail_fast_enabled: bool = True) -> None:
+                 anla_enabled: bool = True, fail_fast_enabled: bool = True,
+                 resource_profile: ResourceProfile | None = None) -> None:
         self.memory = memory or FractalMemory(":memory:")
         self.pipeline = pipeline or AnnePipeline(memory=self.memory, anla_enabled=anla_enabled,
                                                  fail_fast_enabled=fail_fast_enabled)
-        self.orchestrator = CognitiveOrchestrator(self.pipeline)
+        self.resource_profile = resource_profile or ResourceProfile.minimal()
+        self.orchestrator = CognitiveOrchestrator(
+            self.pipeline, resource_profile=self.resource_profile
+        )
 
     def run(self, raw_input: str, claim: str | None = None,
             parties: Sequence[Consciousness] | None = None,
@@ -82,5 +87,9 @@ class DecisionLoop:
         text_claim = claim if claim is not None else raw_input
         hyp = hypothesis or Hypothesis(id=f"h_{uuid4().hex[:12]}", topic=text_claim[:48],
                                        claim=text_claim, probability=probability, source="decision_loop")
-        return FractalThinkingLoop(self.memory, self.pipeline, budget=budget).run(
-            raw_input, hyp, parties=parties, task_mode=task_mode)
+        return FractalThinkingLoop(
+            self.memory,
+            self.pipeline,
+            budget=budget,
+            resource_profile=self.resource_profile,
+        ).run(raw_input, hyp, parties=parties, task_mode=task_mode)
