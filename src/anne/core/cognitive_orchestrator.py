@@ -112,6 +112,10 @@ class CognitiveOrchestrator:
             probability=selected.probability,
             source="MITOS",
         )
+        self.pipeline.memory.save_hypothesis(
+            hypothesis,
+            task_mode=task_mode.value,
+        )
         state = self.pipeline.gor(state, [hypothesis])
         stage_trace.append("ANLA")
         state = self.pipeline.anla(state, hypothesis)
@@ -121,6 +125,15 @@ class CognitiveOrchestrator:
         stage_trace.append("YAP")
         state = self.pipeline.yap(state, hypothesis)
         status = "EXECUTED" if state.action != "HALT" else "ABORTED"
+        if state.ethic_score is not None:
+            self.pipeline.memory.save_decision(
+                decision_id=f"dec_{uuid4().hex[:12]}",
+                hyp_id=hypothesis.id,
+                score=state.ethic_score,
+                consciousnesses=people,
+                stage="YAP",
+                task_mode=task_mode.value,
+            )
         return OrchestrationResult(
             status, ff, state, selection, tuple(stage_trace), ""
         )
