@@ -140,9 +140,6 @@ class WebResearcher:
         if not cls._is_acronym_query(query):
             return True
         acronym = next(token for token in re.findall(r"\b[A-Za-zÇĞİÖŞÜçğıöşü]{2,10}\b", query) if token.lower() not in cls._STOPWORDS)
-        # A true acronym should appear as the same uppercase token, or as an
-        # uppercase token inside parentheses. This rejects e.g. "Young Bess"
-        # for the question "BESS nedir?" without knowing what BESS means.
         return bool(
             re.search(rf"\b{re.escape(acronym)}\b", text)
             or re.search(rf"\(\s*{re.escape(acronym)}\s*\)", text)
@@ -277,11 +274,15 @@ class WebResearcher:
         evidence.sort(key=lambda item: item.confidence, reverse=True)
         return evidence[: self.max_evidence]
 
-    @staticmethod
-    def answer(question: str, evidence: list[EvidenceItem]) -> str | None:
+    @classmethod
+    def answer(cls, question: str, evidence: list[EvidenceItem]) -> str | None:
+        """Answer only from evidence that is relevant to the supplied question."""
         if not evidence:
             return None
-        ranked = sorted(evidence, key=lambda item: item.confidence, reverse=True)
+        relevant = [item for item in evidence if cls._is_relevant(question, item.claim)]
+        if not relevant:
+            return None
+        ranked = sorted(relevant, key=lambda item: item.confidence, reverse=True)
         if ranked[0].confidence < 0.60:
             return None
         top = ranked[0].claim.strip()

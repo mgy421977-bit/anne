@@ -181,11 +181,13 @@ class AnnePipeline:
 
         score = state.ethic_score
         verdict = score.verdict if score else "UNKNOWN"
+        rationale = score.reasoning if score else "No validated decision rationale available."
 
         if verdict == "AYRI_ÇÖZÜM" and group_a and group_b:
             output: dict[str, Any] = {
                 "verdict": verdict,
                 "action": "SEPARATE_SOLUTIONS",
+                "reason": rationale,
                 "group_a": {
                     "for": [c.id for c in group_a],
                     "recommendation": "Independent process for Group A",
@@ -206,7 +208,8 @@ class AnnePipeline:
                 "hypothesis": hypothesis.claim,
                 "source": hypothesis.source,
                 "confidence": hypothesis.probability,
-                "reasoning": score.reasoning if score else "",
+                "reason": rationale,
+                "reasoning": rationale,
                 "empathy_summary": {
                     cid: v["estimated_impact"] for cid, v in state.empathy_map.items()
                 },
@@ -215,7 +218,8 @@ class AnnePipeline:
             output = {
                 "verdict": verdict,
                 "action": "HALT",
-                "reasoning": score.reasoning if score else "",
+                "reason": rationale,
+                "reasoning": rationale,
                 "low_prob_preserved": state.low_prob_preserved,
                 "note": "Low-probability alternatives preserved.",
             }
