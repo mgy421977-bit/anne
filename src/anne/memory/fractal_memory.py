@@ -72,20 +72,15 @@ class FractalMemory:
 
     @staticmethod
     def _normalize_token(token: str) -> str:
-        """Normalize common Turkish inflections for lightweight memory recall.
-
-        This is intentionally conservative: it only strips common grammatical
-        endings and preserves the resulting lexical stem for prefix matching.
-        """
+        """Normalize common Turkish inflections for lightweight memory recall."""
         token = token.casefold().strip(".,!?;:()[]{}\"'")
         if not token:
             return token
         suffixes = (
             "larından", "lerinden", "larına", "lerine", "ların", "lerin",
-            "lardan", "lerden", "ların", "lerin", "lara", "lere",
-            "dan", "den", "tan", "ten", "dır", "dir", "dur", "dür",
-            "tır", "tir", "tur", "tür", "ın", "in", "un", "ün",
-            "ım", "im", "um", "üm", "ı", "i", "u", "ü",
+            "lardan", "lerden", "lara", "lere", "dan", "den", "tan", "ten",
+            "dır", "dir", "dur", "dür", "tır", "tir", "tur", "tür",
+            "ın", "in", "un", "ün", "ım", "im", "um", "üm", "ı", "i", "u", "ü",
         )
         for suffix in suffixes:
             if token.endswith(suffix) and len(token) - len(suffix) >= 3:
@@ -96,6 +91,20 @@ class FractalMemory:
     def _normalized_terms(cls, text: str) -> list[str]:
         raw_terms = re.findall(r"[\wçğıöşüÇĞİÖŞÜ]+", text.casefold(), flags=re.UNICODE)
         return [term for term in (cls._normalize_token(t) for t in raw_terms) if term]
+
+    @staticmethod
+    def _recall_variants(term: str) -> tuple[str, ...]:
+        """Return conservative variants for Turkish consonant alternation.
+
+        Turkish suffixation can soften final k→ğ (e.g. kaynak→kaynağı).
+        Recall needs the reverse candidate as well, but this remains a bounded
+        lexical fallback rather than a general morphological analyzer.
+        """
+        variants = [term]
+        final_map = {"ğ": "k", "b": "p", "c": "ç", "d": "t"}
+        if term and term[-1] in final_map and len(term) >= 3:
+            variants.append(term[:-1] + final_map[term[-1]])
+        return tuple(dict.fromkeys(variants))
 
     def save_hypothesis(self, h: Hypothesis, *, depth: int = 0,
                         parent_cycle_id: str | None = None, task_mode: str = "general") -> None:
@@ -158,12 +167,13 @@ class FractalMemory:
     def get_similar_decisions(self, topic: str, limit: int = 3) -> list[tuple[Any,...]]:
         cur = self.conn.cursor()
         results: list[tuple[Any,...]] = []
-        terms = self._normalized_terms(topic)
-        for term in terms:
-            rows = cur.execute("""SELECT d.verdict,d.total,d.reasoning,h.topic
-                FROM decisions d JOIN hypotheses h ON d.hypothesis_id=h.id
-                WHERE h.topic LIKE ? ORDER BY d.created_at DESC LIMIT ?""", (f"%{term}%",limit)).fetchall()
-            results.extend(rows)
+        for term in self._normalized_terms(topic):
+            for variant in self._recall_variants(term):
+                rows = cur.execute("""SELECT d.verdict,d.total,d.reasoning,h.topic
+                    FROM decisions d JOIN hypotheses h ON d.hypothesis_id=h.id
+                    WHERE h.topic LIKE ? ORDER BY d.created_at DESC LIMIT ?""",
+                    (f"%{variant}%", limit)).fetchall()
+                results.extend(rows)
         deduped: list[tuple[Any,...]] = []
         seen: set[tuple[Any,...]] = set()
         for row in results:
