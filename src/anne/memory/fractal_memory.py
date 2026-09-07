@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from datetime import datetime
@@ -128,29 +129,31 @@ class FractalMemory:
         self.conn.commit()
 
     @staticmethod
-    def _memory_terms(topic: str) -> list[str]:
-        """Create conservative lexical variants for inflected topic words.
+    def _normalize_recall_token(token: str) -> str:
+        """Apply conservative Turkish suffix stripping for memory recall."""
+        token = re.sub(r"[^0-9a-zçğıöşü]+", "", token.casefold())
+        if not token:
+            return token
+        suffixes = (
+            "leriniz", "larınız", "siniz", "sınız", "sunuz", "siniz", "ları", "leri",
+            "ının", "inin", "unun", "ünün", "dan", "den", "tan", "ten", "dir", "dır",
+            "dur", "dür", "tır", "tir", "tur", "tür", "na", "ne", "nın", "nin", "nun",
+            "nün", "ı", "i", "u", "ü", "a", "e"
+        )
+        for suffix in sorted(set(suffixes), key=len, reverse=True):
+            if len(token) - len(suffix) >= 3 and token.endswith(suffix):
+                return token[:-len(suffix)]
+        return token
 
-        This is intentionally small and deterministic. It improves recall for
-        Turkish suffixes such as ``kaynağı`` → ``kaynak`` without pretending
-        that lexical overlap is semantic proof.
-        """
-        terms: list[str] = []
-        for word in topic.casefold().split():
-            cleaned = "".join(ch for ch in word if ch.isalnum())
-            if len(cleaned) < 4:
-                continue
-            terms.append(cleaned)
-            for suffix in ("ları", "leri", "ının", "inin", "unu", "ünü", "ını", "ini", "nın", "nin", "yı", "yi", "ı", "i", "u", "ü"):
-                if cleaned.endswith(suffix) and len(cleaned) - len(suffix) >= 4:
-                    terms.append(cleaned[:-len(suffix)])
-                    break
-        return list(dict.fromkeys(terms))
+    @classmethod
+    def _recall_tokens(cls, text: str) -> list[str]:
+        tokens = [cls._normalize_recall_token(t) for t in text.split()]
+        return [t for t in tokens if t]
 
     def get_similar_decisions(self, topic: str, limit: int = 3) -> list[tuple[Any,...]]:
         cur = self.conn.cursor()
         results: list[tuple[Any,...]] = []
-        for word in self._memory_terms(topic):
+        for word in self._recall_tokens(topic):
             rows = cur.execute("""SELECT d.verdict,d.total,d.reasoning,h.topic
                 FROM decisions d JOIN hypotheses h ON d.hypothesis_id=h.id
                 WHERE h.topic LIKE ? ORDER BY d.created_at DESC LIMIT ?""", (f"%{word}%",limit)).fetchall()
