@@ -6,12 +6,12 @@ validation, ethics, and action. Candidates are never authoritative facts.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from anne.mythos.engine import HypothesisCandidate
 
 
-class TaskMode(str, Enum):
+class TaskMode(StrEnum):
     GENERAL = "general"
     TECHNICAL = "technical"
     EXPLORATORY = "exploratory"
