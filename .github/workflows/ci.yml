@@ -36,3 +36,6 @@ jobs:
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
+
+      - name: Run derivation benchmark #01
+        run: python benchmarks/scripts/run_derivation_benchmark.py
