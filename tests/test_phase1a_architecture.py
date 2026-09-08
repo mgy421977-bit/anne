@@ -2,11 +2,11 @@ from anne.core.cognitive_state import Consciousness, Hypothesis
 from anne.core.decision_loop import DecisionLoop
 from anne.core.pipeline import AnnePipeline
 from anne.core.ambiguity import AmbiguityBoundary, AmbiguityLevel
+from anne.core.gap_fill import GapFiller
 from anne.memory.fractal_memory import FractalMemory
 from anne.mythos.candidate import HypothesisCandidate, TaskMode
 from anne.mythos.engine import ExplorationMode
 from anne.mythos.selection import CandidateSelector
-from anne.mythos.gap_filler import GapFiller
 
 
 def candidate(harm_risk=0.1):
