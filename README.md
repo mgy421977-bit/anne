@@ -365,4 +365,4 @@ See [`ROADMAP.md`](ROADMAP.md) for milestone-level criteria.
 
 Apache License 2.0 — see [`LICENSE`](LICENSE).
 
-**Author:** Mustafa Gökhan Yılmaz · ORCID [0009-0002-6591-0163](https://orcid.org/0000-0000-0000-0000) · İzmir, Türkiye
+**Author:** Mustafa Gökhan Yılmaz · ORCID [0009-0002-6591-0163](https://orcid.org/0009-0002-6591-0163) · İzmir, Türkiye
