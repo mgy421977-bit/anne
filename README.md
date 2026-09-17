@@ -1,5 +1,26 @@
 # ANNE — Adaptive Neural Nexus Engine
 
+> ## ⚠️ LEGACY REPOSITORY — FROZEN
+>
+> This repository represents the **frozen legacy ANNE line**. Active architectural development has moved to the canonical research platform and core library below.
+>
+> **Canonical platform:** [`mgy421977-bit/anne-ai`](https://github.com/mgy421977-bit/anne-ai)  
+> **Installable core:** [`mgy421977-bit/anne-core`](https://github.com/mgy421977-bit/anne-core)
+>
+> The `anne` repository is retained for historical, reproducibility, and reference purposes. New features, architectural changes, and research milestones should be developed in `anne-ai` and, where appropriate, extracted into `anne-core`.
+>
+> ### Canonical project map
+>
+> ```text
+> anne       → FROZEN LEGACY
+> anne-ai    → CANONICAL RESEARCH PLATFORM
+> anne-core  → INSTALLABLE CORE LIBRARY
+> ```
+>
+> **External summary:** Canonical platform: `anne-ai`. Installable core: `anne-core`. Legacy frozen: `anne`.
+>
+> The historical documentation below describes the state of this repository at the time it was frozen. It should not be interpreted as the current implementation status of the canonical ANNE platform.
+
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Status](https://img.shields.io/badge/status-research%20preview-orange)](https://github.com/mgy421977-bit/anne)
@@ -52,7 +73,7 @@ No component should be interpreted as proof of consciousness, general intelligen
 │   │      │      │      │        │        │               │
 │   │      │      │      │        │        └─ action       │
 │   │      │      │      │        └──────── contextual     │
-│   │      │      │      └──────────────── semantic gate  │
+│   │      │      └──────────────────── semantic gate  │
 │   │      │      └──────────────────── pattern/attention │
 │   │      └────────────────────────── observation/memory │
 │   └────────────────────────────────── perception         │
@@ -344,4 +365,4 @@ See [`ROADMAP.md`](ROADMAP.md) for milestone-level criteria.
 
 Apache License 2.0 — see [`LICENSE`](LICENSE).
 
-**Author:** Mustafa Gökhan Yılmaz · ORCID [0009-0002-6591-0163](https://orcid.org/0009-0002-6591-0163) · İzmir, Türkiye
+**Author:** Mustafa Gökhan Yılmaz · ORCID [0009-0002-6591-0163](https://orcid.org/0000-0000-0000-0000) · İzmir, Türkiye
